@@ -5,6 +5,7 @@ from dataclasses import asdict
 from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
+import csv
 import json
 import re
 import shutil
@@ -837,11 +838,21 @@ class ConsentPipeline:
         payload = json.loads(inventory_path.read_text(encoding="utf-8"))
         return payload if isinstance(payload, list) else []
 
+    def _load_run_manifest_payload(self, run_id: str) -> dict[str, Any]:
+        manifest_path = self.artifacts.run_path(run_id, "manifest.json")
+        if not manifest_path.exists():
+            return {}
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        return payload if isinstance(payload, dict) else {}
+
     def _extract_study_reference(self, source_doc: dict[str, Any]) -> dict[str, Any] | None:
         source_path = Path(str(source_doc.get("path", "")).strip())
         if not source_path.exists():
             return None
-        payload = json.loads(source_path.read_text(encoding="utf-8"))
+        try:
+            payload = json.loads(source_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
         protocol_section = payload.get("protocolSection", {})
         if not isinstance(protocol_section, dict):
             return None
@@ -946,6 +957,84 @@ class ConsentPipeline:
             "available_documents": available_documents,
             "source_path": str(source_path),
             "source_url": source_doc.get("metadata", {}).get("url"),
+        }
+
+    def resolve_study_reference_for_source_ids(
+        self,
+        run_id: str,
+        source_id_filters: list[str] | None,
+    ) -> dict[str, Any] | None:
+        wanted_ids = {str(item).strip().lower() for item in (source_id_filters or []) if str(item).strip()}
+        if not wanted_ids:
+            return None
+
+        source_documents = self._load_run_source_documents(run_id)
+        for doc in source_documents:
+            source_id = str(doc.get("source_id", "")).strip().lower()
+            nct_id = str(doc.get("metadata", {}).get("nct_id", "")).strip().lower()
+            if source_id in wanted_ids or nct_id in wanted_ids:
+                return self._extract_study_reference(doc)
+        return None
+
+    def build_study_query_context(
+        self,
+        run_id: str,
+        source_id_filters: list[str] | None,
+    ) -> dict[str, Any]:
+        study_reference = self.resolve_study_reference_for_source_ids(run_id, source_id_filters)
+        manifest_payload = self._load_run_manifest_payload(run_id)
+        run_notes = str(manifest_payload.get("notes", "")).strip()
+
+        selected_source_ids = [str(item).strip().lower() for item in (source_id_filters or []) if str(item).strip()]
+        if not study_reference and not selected_source_ids:
+            return {}
+
+        intervention_names = [
+            str(item.get("name", "")).strip()
+            for item in (study_reference.get("interventions", []) if isinstance(study_reference, dict) else [])
+            if isinstance(item, dict) and str(item.get("name", "")).strip()
+        ][:3]
+        conditions = [
+            str(item).strip()
+            for item in (study_reference.get("conditions", []) if isinstance(study_reference, dict) else [])
+            if str(item).strip()
+        ][:3]
+        keywords = [
+            str(item).strip()
+            for item in (study_reference.get("keywords", []) if isinstance(study_reference, dict) else [])
+            if str(item).strip()
+        ][:3]
+
+        query_terms: list[str] = []
+        for value in (
+            *(selected_source_ids or []),
+            str(study_reference.get("source_id", "")).strip() if isinstance(study_reference, dict) else "",
+            str(study_reference.get("nct_id", "")).strip() if isinstance(study_reference, dict) else "",
+            str(study_reference.get("title", "")).strip() if isinstance(study_reference, dict) else "",
+            str(study_reference.get("brief_title", "")).strip() if isinstance(study_reference, dict) else "",
+            str(study_reference.get("official_title", "")).strip() if isinstance(study_reference, dict) else "",
+            str(study_reference.get("primary_purpose", "")).strip() if isinstance(study_reference, dict) else "",
+            str(study_reference.get("study_type", "")).strip() if isinstance(study_reference, dict) else "",
+            str(study_reference.get("brief_summary", "")).strip()[:240] if isinstance(study_reference, dict) else "",
+            *conditions,
+            *keywords,
+            *intervention_names,
+            run_notes,
+        ):
+            text = str(value).strip()
+            if not text:
+                continue
+            if text not in query_terms:
+                query_terms.append(text)
+
+        return {
+            "selected_source_ids": selected_source_ids,
+            "study_reference": study_reference,
+            "run_notes": run_notes,
+            "conditions": conditions,
+            "keywords": keywords,
+            "intervention_names": intervention_names,
+            "query_terms": " | ".join(query_terms),
         }
 
     def _build_regulatory_reference_checklist(
@@ -1273,6 +1362,8 @@ class ConsentPipeline:
                 question_set_file_value=raw_case.get("question_set_file", defaults.get("question_set_file")),
                 base_dir=spec_path.parent,
             )
+            patient_profile_label = patient_profile_file.stem
+            question_set_label = question_set_path.stem if question_set_path else ""
             generation_query = raw_case.get("generation_query", defaults.get("generation_query"))
             top_k = raw_case.get("top_k", defaults.get("top_k"))
             retrieval_source_groups = normalize_string_list(
@@ -1290,6 +1381,7 @@ class ConsentPipeline:
             retrieval_mode = str(raw_case.get("retrieval_mode", defaults.get("retrieval_mode", self.config.retrieval.retrieval_mode))).strip().lower()
             if retrieval_mode not in {"lexical", "dense", "hybrid"}:
                 retrieval_mode = self.config.retrieval.retrieval_mode
+            effective_retrieval_mode = "none" if workflow_variant == "vanilla_llm" else retrieval_mode
             generate_draft = bool(raw_case.get("generate_draft", defaults.get("generate_draft", True)))
             formalize = bool(raw_case.get("formalize", defaults.get("formalize", True)))
             case_notes = str(raw_case.get("notes", defaults.get("notes", "")))
@@ -1318,13 +1410,15 @@ class ConsentPipeline:
                 "study_source_id": study_source_id,
                 "reporting_role": reporting_role,
                 "patient_profile_file": str(patient_profile_file),
+                "patient_profile_label": patient_profile_label,
                 "template_file": str(template_file) if template_file else None,
                 "question_set_file": str(question_set_path) if question_set_path else None,
+                "question_set_label": question_set_label,
                 "question_count": len(questions),
                 "dry_run": dry_run,
                 "status": "pending",
                 "workflow_variant": workflow_variant,
-                "retrieval_mode": retrieval_mode,
+                "retrieval_mode": effective_retrieval_mode,
                 "retrieval_source_groups": retrieval_source_groups,
                 "retrieval_source_ids": retrieval_source_ids,
                 "retrieval_filter_logic": retrieval_filter_logic,
@@ -1405,10 +1499,12 @@ class ConsentPipeline:
                         "case_run_id": case_run_id,
                         "study_id": study_identity,
                         "study_source_id": study_source_id,
+                        "patient_profile_label": patient_profile_label,
+                        "question_set_label": question_set_label,
                         "workflow_variant": workflow_variant,
                         "reporting_role": reporting_role,
                         "status": case_result["status"],
-                        "retrieval_mode": retrieval_mode,
+                        "retrieval_mode": effective_retrieval_mode,
                         "retrieval_filter_logic": retrieval_filter_logic,
                         "question_count": qa_summary.get("question_count", 0),
                         "qa_answered_question_count": qa_summary.get("answered_question_count"),
@@ -1443,10 +1539,12 @@ class ConsentPipeline:
                         "case_run_id": case_run_id,
                         "study_id": study_identity,
                         "study_source_id": study_source_id,
+                        "patient_profile_label": patient_profile_label,
+                        "question_set_label": question_set_label,
                         "workflow_variant": workflow_variant,
                         "reporting_role": reporting_role,
                         "status": case_result["status"],
-                        "retrieval_mode": retrieval_mode,
+                        "retrieval_mode": effective_retrieval_mode,
                         "question_count": len(questions),
                         "qa_answered_question_count": None,
                         "qa_abstained_question_count": None,
@@ -1583,35 +1681,129 @@ class ConsentPipeline:
         if len(batch_summary_paths) < 2:
             raise ValueError("At least two batch summary files are required for comparison.")
 
+        def parse_metric_value(value: Any) -> float | bool | None:
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, (int, float)):
+                return float(value)
+            text = str(value or "").strip()
+            if not text:
+                return None
+            lowered = text.lower()
+            if lowered in {"true", "false"}:
+                return lowered == "true"
+            try:
+                return float(text)
+            except ValueError:
+                return None
+
         rows: list[dict[str, Any]] = []
+        case_rows: list[dict[str, Any]] = []
         for summary_path in batch_summary_paths:
             payload = json.loads(summary_path.read_text(encoding="utf-8"))
             aggregate_metrics = payload.get("aggregate_metrics", {})
             if not isinstance(aggregate_metrics, dict):
                 aggregate_metrics = {}
+            batch_id = payload.get("batch_id")
+            batch_run_id = payload.get("batch_run_id")
+            reporting_role = payload.get("reporting_role")
+            case_metrics_csv = payload.get("case_metrics_csv")
             rows.append(
                 {
-                    "batch_id": payload.get("batch_id"),
-                    "batch_run_id": payload.get("batch_run_id"),
-                    "reporting_role": payload.get("reporting_role"),
+                    "batch_id": batch_id,
+                    "batch_run_id": batch_run_id,
+                    "reporting_role": reporting_role,
                     "case_count": payload.get("case_count"),
                     "completed_case_count": payload.get("completed_case_count"),
                     "failed_case_count": payload.get("failed_case_count"),
                     **aggregate_metrics,
                     "batch_summary_path": str(summary_path.resolve()),
-                    "case_metrics_csv": payload.get("case_metrics_csv"),
+                    "case_metrics_csv": case_metrics_csv,
                 }
             )
+            if case_metrics_csv:
+                case_metrics_path = Path(str(case_metrics_csv))
+                if case_metrics_path.exists():
+                    with case_metrics_path.open("r", encoding="utf-8", newline="") as handle:
+                        reader = csv.DictReader(handle)
+                        for case_row in reader:
+                            case_rows.append(
+                                {
+                                    **case_row,
+                                    "batch_id": batch_id,
+                                    "batch_run_id": batch_run_id,
+                                    "reporting_role": reporting_role,
+                                }
+                            )
 
         comparison_label = re.sub(r"[^a-z0-9]+", "_", (comparison_id or "batch_comparison").lower()).strip("_") or "batch_comparison"
         csv_path = self.artifacts.write_table_csv(f"{comparison_label}.csv", rows)
         json_path = self.artifacts.tables_dir / f"{comparison_label}.json"
-        self.artifacts.write_json(json_path, {"comparison_id": comparison_label, "rows": rows})
+        case_csv_path = self.artifacts.write_table_csv(f"{comparison_label}_case_rows.csv", case_rows)
+
+        grouped_rows: list[dict[str, Any]] = []
+        group_fields = ("workflow_variant", "question_set_label")
+        aggregate_metric_fields = [
+            "draft_study_specific_grounding_met",
+            "draft_study_specific_grounding_gap",
+            "draft_study_specific_hit_count",
+            "draft_required_element_coverage_ratio",
+            "draft_sentence_citation_coverage_ratio",
+            "draft_flesch_kincaid_grade",
+            "qa_answered_question_count",
+            "qa_abstained_question_count",
+            "qa_abstention_rate",
+            "qa_uncertainty_rate",
+            "qa_average_sentence_citation_coverage_ratio",
+            "qa_average_flesch_kincaid_grade",
+            "structured_required_field_presence_ratio",
+            "structured_schema_repair_applied",
+        ]
+        grouped_values: dict[tuple[str, str], dict[str, list[float]]] = {}
+        grouped_counts: Counter[tuple[str, str]] = Counter()
+        for row in case_rows:
+            key = (
+                str(row.get("workflow_variant", "")).strip() or "unknown",
+                str(row.get("question_set_label", "")).strip() or "unknown",
+            )
+            grouped_counts[key] += 1
+            grouped_values.setdefault(key, {})
+            for field in aggregate_metric_fields:
+                parsed = parse_metric_value(row.get(field))
+                if parsed is None:
+                    continue
+                numeric_value = 1.0 if parsed is True else 0.0 if parsed is False else float(parsed)
+                grouped_values[key].setdefault(field, []).append(numeric_value)
+
+        for key, field_map in sorted(grouped_values.items()):
+            workflow_variant, question_set_label = key
+            grouped_row: dict[str, Any] = {
+                "workflow_variant": workflow_variant,
+                "question_set_label": question_set_label,
+                "case_count": grouped_counts[key],
+            }
+            for field in aggregate_metric_fields:
+                values = field_map.get(field, [])
+                grouped_row[f"average_{field}"] = round(sum(values) / len(values), 4) if values else None
+            grouped_rows.append(grouped_row)
+
+        grouped_csv_path = self.artifacts.write_table_csv(f"{comparison_label}_grouped_by_workflow_and_question_set.csv", grouped_rows)
+        self.artifacts.write_json(
+            json_path,
+            {
+                "comparison_id": comparison_label,
+                "aggregate_rows": rows,
+                "case_row_count": len(case_rows),
+                "grouped_row_count": len(grouped_rows),
+            },
+        )
         return {
             "comparison_id": comparison_label,
             "row_count": len(rows),
             "comparison_csv": str(csv_path),
             "comparison_json": str(json_path),
+            "case_rows_csv": str(case_csv_path),
+            "grouped_comparison_csv": str(grouped_csv_path),
         }
 
     def plan_public_sources(

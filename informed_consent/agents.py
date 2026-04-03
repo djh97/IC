@@ -1420,6 +1420,7 @@ class OrchestratorAgent(BaseAgent):
     def plan_personalization_grounding(
         self,
         *,
+        run_id: str,
         patient_profile: PatientProfile,
         base_template_text: str,
         generation_query: str | None,
@@ -1431,6 +1432,17 @@ class OrchestratorAgent(BaseAgent):
     ) -> dict[str, Any]:
         planned_source_groups = list(source_group_filters or ["regulatory_guidance", "trial_materials"])
         planned_filter_logic = filter_logic or ("union" if source_group_filters or source_id_filters else "union")
+        study_query_context = self.tools.retrieval.build_study_query_context(run_id, list(source_id_filters or []))
+        base_query = generation_query or self.tools.retrieval.build_personalization_query(patient_profile, base_template_text)
+        study_specific_query = " | ".join(
+            part
+            for part in (
+                study_query_context.get("query_terms", ""),
+                base_query,
+                "study specific trial facts purpose procedures intervention visits eligibility condition treatment",
+            )
+            if str(part).strip()
+        )
         required_source_groups: list[str] = []
         if "regulatory_guidance" in planned_source_groups:
             required_source_groups.append("regulatory_guidance")
@@ -1445,7 +1457,10 @@ class OrchestratorAgent(BaseAgent):
             if source_group in planned_source_groups or source_group in required_source_groups
         ]
         return {
-            "query": generation_query or self.tools.retrieval.build_personalization_query(patient_profile, base_template_text),
+            "query": study_specific_query if study_query_context else base_query,
+            "study_query": study_specific_query if study_query_context else base_query,
+            "regulatory_query": base_query,
+            "study_query_context": study_query_context,
             "top_k": top_k or self.runtime.config.retrieval.top_k,
             "retrieval_mode": retrieval_mode or self.runtime.config.retrieval.retrieval_mode,
             "source_group_filters": planned_source_groups,
@@ -1453,6 +1468,105 @@ class OrchestratorAgent(BaseAgent):
             "filter_logic": planned_filter_logic,
             "required_source_groups": required_source_groups,
             "preferred_source_groups": preferred_source_groups,
+        }
+
+    def should_split_study_scoped_retrieval(
+        self,
+        *,
+        source_group_filters: list[str],
+        source_id_filters: list[str],
+    ) -> bool:
+        group_set = {str(item).strip() for item in source_group_filters if str(item).strip()}
+        return bool(source_id_filters) and {"trial_materials", "regulatory_guidance"}.issubset(group_set)
+
+    def retrieve_scoped_grounding_artifacts(
+        self,
+        *,
+        run_id: str,
+        query: str,
+        top_k: int,
+        retrieval_mode: str,
+        source_group_filters: list[str],
+        source_id_filters: list[str],
+        filter_logic: str,
+        purpose_prefix: str,
+        emit_result_to: str,
+        study_query: str | None = None,
+        regulatory_query: str | None = None,
+    ) -> dict[str, Any]:
+        split_scoped = self.should_split_study_scoped_retrieval(
+            source_group_filters=source_group_filters,
+            source_id_filters=source_id_filters,
+        )
+        if not split_scoped:
+            single_artifacts = self.rag_agent.retrieve_evidence(
+                run_id=run_id,
+                query=query,
+                top_k=top_k,
+                retrieval_mode=retrieval_mode,
+                source_group_filters=source_group_filters,
+                source_id_filters=source_id_filters,
+                filter_logic=filter_logic,
+                purpose=purpose_prefix,
+                emit_result_to=emit_result_to,
+            )
+            return {
+                "retrieval_artifacts": single_artifacts,
+                "scoped_retrieval": False,
+                "study_hits_path": None,
+                "regulatory_hits_path": None,
+                "merged_evidence_package_path": None,
+                "study_result_handoff_path": single_artifacts.get("result_handoff_path"),
+                "regulatory_result_handoff_path": None,
+            }
+
+        study_top_k = max(1, (top_k + 1) // 2)
+        regulatory_top_k = max(1, top_k - study_top_k)
+        study_artifacts = self.rag_agent.retrieve_evidence(
+            run_id=run_id,
+            query=study_query or query,
+            top_k=study_top_k,
+            retrieval_mode=retrieval_mode,
+            source_group_filters=["trial_materials"],
+            source_id_filters=source_id_filters,
+            filter_logic="intersection",
+            purpose=f"{purpose_prefix}_study",
+            emit_result_to=emit_result_to,
+        )
+        regulatory_artifacts = self.rag_agent.retrieve_evidence(
+            run_id=run_id,
+            query=regulatory_query or query,
+            top_k=regulatory_top_k,
+            retrieval_mode=retrieval_mode,
+            source_group_filters=["regulatory_guidance"],
+            source_id_filters=[],
+            filter_logic="intersection",
+            purpose=f"{purpose_prefix}_regulatory",
+            emit_result_to=emit_result_to,
+        )
+        merged_artifacts = self.merge_retrieval_artifacts(
+            primary_artifacts=study_artifacts,
+            recovery_artifacts=regulatory_artifacts,
+        )
+        merged_artifacts["scoped_retrieval_strategy"] = "study_plus_regulatory_split"
+        merged_artifacts["study_query"] = study_query or query
+        merged_artifacts["regulatory_query"] = regulatory_query or query
+
+        outputs_dir = self.tools.artifacts.run_path(run_id, "outputs")
+        study_hits_path = outputs_dir / f"{purpose_prefix}_study_retrieval_hits.json"
+        regulatory_hits_path = outputs_dir / f"{purpose_prefix}_regulatory_retrieval_hits.json"
+        merged_evidence_package_path = outputs_dir / f"{purpose_prefix}_merged_evidence_package.json"
+        self.tools.artifacts.write_json(study_hits_path, study_artifacts["retrieval_hits"])
+        self.tools.artifacts.write_json(regulatory_hits_path, regulatory_artifacts["retrieval_hits"])
+        self.tools.artifacts.write_json(merged_evidence_package_path, merged_artifacts["evidence_package"])
+        return {
+            "retrieval_artifacts": merged_artifacts,
+            "scoped_retrieval": True,
+            "study_hits_path": str(study_hits_path),
+            "regulatory_hits_path": str(regulatory_hits_path),
+            "merged_evidence_package_path": str(merged_evidence_package_path),
+            "study_result_handoff_path": study_artifacts.get("result_handoff_path"),
+            "regulatory_result_handoff_path": regulatory_artifacts.get("result_handoff_path"),
         }
 
     def build_study_specific_personalization_enrichment_plan(
@@ -2114,6 +2228,7 @@ class OrchestratorAgent(BaseAgent):
         patient_profile = self.tools.state.resolve_patient_profile(run_id, patient_profile_path)
         base_template_text = self.tools.state.resolve_base_template_text(run_id, template_path)
         retrieval_plan = self.plan_personalization_grounding(
+            run_id=run_id,
             patient_profile=patient_profile,
             base_template_text=base_template_text,
             generation_query=generation_query,
@@ -2130,6 +2245,12 @@ class OrchestratorAgent(BaseAgent):
         study_enrichment_evidence_package_path: str | None = None
         study_enrichment_request_handoff_path: str | None = None
         study_enrichment_result_handoff_path: str | None = None
+        scoped_retrieval_study_hits_path: str | None = None
+        scoped_retrieval_regulatory_hits_path: str | None = None
+        scoped_retrieval_evidence_package_path: str | None = None
+        scoped_retrieval_study_result_handoff_path: str | None = None
+        scoped_retrieval_regulatory_result_handoff_path: str | None = None
+        scoped_retrieval_applied = False
 
         if workflow_variant == "vanilla_llm":
             retrieval_artifacts = self.build_empty_retrieval_artifacts(
@@ -2138,6 +2259,14 @@ class OrchestratorAgent(BaseAgent):
                 filter_logic=retrieval_plan["filter_logic"],
             )
         else:
+            retrieval_strategy = (
+                "study_plus_regulatory_split"
+                if self.should_split_study_scoped_retrieval(
+                    source_group_filters=retrieval_plan["source_group_filters"],
+                    source_id_filters=retrieval_plan["source_id_filters"],
+                )
+                else "single_pass"
+            )
             orchestrator_to_rag = self.emit_handoff(
                 run_id,
                 to_agent=self.rag_agent.agent_label,
@@ -2149,6 +2278,10 @@ class OrchestratorAgent(BaseAgent):
                     "source_group_filters": retrieval_plan["source_group_filters"],
                     "source_id_filters": retrieval_plan["source_id_filters"],
                     "filter_logic": retrieval_plan["filter_logic"],
+                    "retrieval_strategy": retrieval_strategy,
+                    "study_query": retrieval_plan.get("study_query"),
+                    "regulatory_query": retrieval_plan.get("regulatory_query"),
+                    "study_query_context": retrieval_plan.get("study_query_context"),
                     "workflow_variant": workflow_variant,
                     "participant_profile": {
                         "participant_id": patient_profile.participant_id,
@@ -2160,7 +2293,7 @@ class OrchestratorAgent(BaseAgent):
                 },
             )
             orchestrator_to_rag_path = orchestrator_to_rag["path"]
-            retrieval_artifacts = self.rag_agent.retrieve_evidence(
+            scoped_retrieval_bundle = self.retrieve_scoped_grounding_artifacts(
                 run_id=run_id,
                 query=query,
                 top_k=retrieval_plan["top_k"],
@@ -2168,9 +2301,18 @@ class OrchestratorAgent(BaseAgent):
                 source_group_filters=retrieval_plan["source_group_filters"],
                 source_id_filters=retrieval_plan["source_id_filters"],
                 filter_logic=retrieval_plan["filter_logic"],
-                purpose="personalization_grounding",
+                purpose_prefix="personalization_grounding",
                 emit_result_to=self.agent_label,
+                study_query=retrieval_plan.get("study_query"),
+                regulatory_query=retrieval_plan.get("regulatory_query"),
             )
+            retrieval_artifacts = scoped_retrieval_bundle["retrieval_artifacts"]
+            scoped_retrieval_applied = bool(scoped_retrieval_bundle["scoped_retrieval"])
+            scoped_retrieval_study_hits_path = scoped_retrieval_bundle["study_hits_path"]
+            scoped_retrieval_regulatory_hits_path = scoped_retrieval_bundle["regulatory_hits_path"]
+            scoped_retrieval_evidence_package_path = scoped_retrieval_bundle["merged_evidence_package_path"]
+            scoped_retrieval_study_result_handoff_path = scoped_retrieval_bundle["study_result_handoff_path"]
+            scoped_retrieval_regulatory_result_handoff_path = scoped_retrieval_bundle["regulatory_result_handoff_path"]
 
             if workflow_variant == "full_agentic":
                 study_enrichment_plan = self.build_study_specific_personalization_enrichment_plan(
@@ -2634,6 +2776,12 @@ class OrchestratorAgent(BaseAgent):
                 "draft_output_path": final_output_path,
                 "request_bundle_path": final_request_bundle_path,
                 "orchestrator_to_rag_handoff_path": orchestrator_to_rag_path,
+                "scoped_retrieval_applied": scoped_retrieval_applied,
+                "scoped_retrieval_study_hits_path": scoped_retrieval_study_hits_path,
+                "scoped_retrieval_regulatory_hits_path": scoped_retrieval_regulatory_hits_path,
+                "scoped_retrieval_evidence_package_path": scoped_retrieval_evidence_package_path,
+                "scoped_retrieval_study_result_handoff_path": scoped_retrieval_study_result_handoff_path,
+                "scoped_retrieval_regulatory_result_handoff_path": scoped_retrieval_regulatory_result_handoff_path,
                 "orchestrator_to_personalization_handoff_path": orchestrator_to_personalization["path"],
                 "personalization_result_handoff_path": draft_payload.get("agent_handoff_path"),
                 "draft_content_plan_path": draft_content_plan_path,
@@ -2693,6 +2841,12 @@ class OrchestratorAgent(BaseAgent):
         )
 
         orchestrator_to_rag_path: str | None = None
+        scoped_retrieval_study_hits_path: str | None = None
+        scoped_retrieval_regulatory_hits_path: str | None = None
+        scoped_retrieval_evidence_package_path: str | None = None
+        scoped_retrieval_study_result_handoff_path: str | None = None
+        scoped_retrieval_regulatory_result_handoff_path: str | None = None
+        scoped_retrieval_applied = False
         if workflow_variant == "vanilla_llm":
             retrieval_artifacts = self.build_empty_retrieval_artifacts(
                 source_group_filters=retrieval_plan["source_group_filters"],
@@ -2700,6 +2854,14 @@ class OrchestratorAgent(BaseAgent):
                 filter_logic=retrieval_plan["filter_logic"],
             )
         else:
+            retrieval_strategy = (
+                "study_plus_regulatory_split"
+                if self.should_split_study_scoped_retrieval(
+                    source_group_filters=retrieval_plan["source_group_filters"],
+                    source_id_filters=retrieval_plan["source_id_filters"],
+                )
+                else "single_pass"
+            )
             orchestrator_to_rag = self.emit_handoff(
                 run_id,
                 to_agent=self.rag_agent.agent_label,
@@ -2713,6 +2875,7 @@ class OrchestratorAgent(BaseAgent):
                     "source_group_filters": retrieval_plan["source_group_filters"],
                     "source_id_filters": retrieval_plan["source_id_filters"],
                     "filter_logic": retrieval_plan["filter_logic"],
+                    "retrieval_strategy": retrieval_strategy,
                     "question_profile": retrieval_plan["question_profile"],
                     "workflow_variant": workflow_variant,
                     "planning_mode": retrieval_plan.get("planning_mode"),
@@ -2726,7 +2889,7 @@ class OrchestratorAgent(BaseAgent):
                 },
             )
             orchestrator_to_rag_path = orchestrator_to_rag["path"]
-            retrieval_artifacts = self.rag_agent.retrieve_evidence(
+            scoped_retrieval_bundle = self.retrieve_scoped_grounding_artifacts(
                 run_id=run_id,
                 query=retrieval_plan["query"],
                 top_k=retrieval_plan["top_k"],
@@ -2734,9 +2897,18 @@ class OrchestratorAgent(BaseAgent):
                 source_group_filters=retrieval_plan["source_group_filters"],
                 source_id_filters=retrieval_plan["source_id_filters"],
                 filter_logic=retrieval_plan["filter_logic"],
-                purpose="question_answer_grounding",
+                purpose_prefix="question_answer_grounding",
                 emit_result_to=self.agent_label,
+                study_query=retrieval_plan["query"],
+                regulatory_query=retrieval_plan["query"],
             )
+            retrieval_artifacts = scoped_retrieval_bundle["retrieval_artifacts"]
+            scoped_retrieval_applied = bool(scoped_retrieval_bundle["scoped_retrieval"])
+            scoped_retrieval_study_hits_path = scoped_retrieval_bundle["study_hits_path"]
+            scoped_retrieval_regulatory_hits_path = scoped_retrieval_bundle["regulatory_hits_path"]
+            scoped_retrieval_evidence_package_path = scoped_retrieval_bundle["merged_evidence_package_path"]
+            scoped_retrieval_study_result_handoff_path = scoped_retrieval_bundle["study_result_handoff_path"]
+            scoped_retrieval_regulatory_result_handoff_path = scoped_retrieval_bundle["regulatory_result_handoff_path"]
         sufficiency = self.assess_evidence_sufficiency(
             retrieval_artifacts=retrieval_artifacts,
             required_source_groups=retrieval_plan["required_source_groups"],
@@ -2862,6 +3034,12 @@ class OrchestratorAgent(BaseAgent):
                 "answer_output_path": answer_payload.get("output_path"),
                 "request_bundle_path": answer_payload.get("request_bundle_path"),
                 "orchestrator_to_rag_handoff_path": orchestrator_to_rag_path,
+                "scoped_retrieval_applied": scoped_retrieval_applied,
+                "scoped_retrieval_study_hits_path": scoped_retrieval_study_hits_path,
+                "scoped_retrieval_regulatory_hits_path": scoped_retrieval_regulatory_hits_path,
+                "scoped_retrieval_evidence_package_path": scoped_retrieval_evidence_package_path,
+                "scoped_retrieval_study_result_handoff_path": scoped_retrieval_study_result_handoff_path,
+                "scoped_retrieval_regulatory_result_handoff_path": scoped_retrieval_regulatory_result_handoff_path,
                 "orchestrator_to_conversational_handoff_path": orchestrator_to_conversational["path"],
                 "conversational_result_handoff_path": answer_payload.get("agent_handoff_path"),
             },

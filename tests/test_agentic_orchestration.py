@@ -196,6 +196,7 @@ class AgenticOrchestrationTests(unittest.TestCase):
 
     def test_personalization_grounding_requires_trial_materials_when_study_scope_is_requested(self) -> None:
         plan = self.pipeline.orchestrator_agent.plan_personalization_grounding(
+            run_id=self.run_id,
             patient_profile=self.pipeline.load_patient_profile(self.patient_profile_path),
             base_template_text=self.template_path.read_text(encoding="utf-8"),
             generation_query=None,
@@ -208,6 +209,76 @@ class AgenticOrchestrationTests(unittest.TestCase):
 
         self.assertEqual(plan["required_source_groups"], ["regulatory_guidance", "trial_materials"])
         self.assertIn("trial_materials", plan["preferred_source_groups"])
+
+    def test_scoped_grounding_retrieval_splits_study_and_regulatory_passes(self) -> None:
+        def fake_retrieve(**kwargs):
+            source_group_filters = kwargs["source_group_filters"]
+            source_id_filters = kwargs["source_id_filters"]
+            if source_group_filters == ["trial_materials"]:
+                self.assertEqual(source_id_filters, ["nct03877237"])
+                hits = [
+                    {
+                        "source_id": "nct03877237",
+                        "chunk_id": "study-1",
+                        "rank": 1,
+                        "score": 0.9,
+                        "citation_label": "Target Study",
+                        "excerpt": "Target study procedures and intervention.",
+                        "metadata": {"source_group": "trial_materials"},
+                    }
+                ]
+            else:
+                self.assertEqual(source_group_filters, ["regulatory_guidance"])
+                self.assertEqual(source_id_filters, [])
+                hits = [
+                    {
+                        "source_id": "common_rule_2018_july",
+                        "chunk_id": "reg-1",
+                        "rank": 1,
+                        "score": 0.8,
+                        "citation_label": "Common Rule",
+                        "excerpt": "Participation is voluntary and withdrawal is allowed.",
+                        "metadata": {"source_group": "regulatory_guidance"},
+                    }
+                ]
+            return {
+                "query": kwargs["query"],
+                "mode_used": kwargs["retrieval_mode"],
+                "dense_available": True,
+                "lexical_hits": [],
+                "dense_hits": [],
+                "retrieval_hits": hits,
+                "retrieved_context": "",
+                "citation_map": self.pipeline.build_citation_map(hits),
+                "evidence_package": self.pipeline.build_role_separated_evidence_package(hits),
+                "source_group_filters": source_group_filters,
+                "source_id_filters": source_id_filters,
+                "filter_logic_used": kwargs["filter_logic"],
+                "filtered_chunk_count": len(hits),
+                "result_handoff_path": None,
+            }
+
+        with patch.object(self.pipeline.rag_agent, "retrieve_evidence", side_effect=fake_retrieve) as mock_retrieve:
+            payload = self.pipeline.orchestrator_agent.retrieve_scoped_grounding_artifacts(
+                run_id=self.run_id,
+                query="generic query",
+                top_k=6,
+                retrieval_mode="hybrid",
+                source_group_filters=["regulatory_guidance", "trial_materials"],
+                source_id_filters=["nct03877237"],
+                filter_logic="union",
+                purpose_prefix="personalization_grounding",
+                emit_result_to=self.pipeline.orchestrator_agent.agent_label,
+                study_query="study-specific query",
+                regulatory_query="regulatory query",
+            )
+
+        self.assertTrue(payload["scoped_retrieval"])
+        self.assertEqual(mock_retrieve.call_count, 2)
+        merged_hits = payload["retrieval_artifacts"]["retrieval_hits"]
+        self.assertEqual([hit["source_id"] for hit in merged_hits], ["nct03877237", "common_rule_2018_july"])
+        self.assertEqual(payload["retrieval_artifacts"]["evidence_package"]["role_counts"]["study_specific"], 1)
+        self.assertEqual(payload["retrieval_artifacts"]["evidence_package"]["role_counts"]["regulatory"], 1)
 
     def test_merge_retrieval_artifacts_deduplicates_and_rebuilds_citations(self) -> None:
         primary = {

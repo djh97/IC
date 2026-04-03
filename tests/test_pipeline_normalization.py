@@ -227,6 +227,26 @@ class PipelineNormalizationTests(unittest.TestCase):
             pipeline = ConsentPipeline(config)
             summary_a = root / "batch_a.json"
             summary_b = root / "batch_b.json"
+            case_metrics_a = root / "a.csv"
+            case_metrics_b = root / "b.csv"
+            case_metrics_a.write_text(
+                "\n".join(
+                    [
+                        "workflow_variant,question_set_label,draft_required_element_coverage_ratio,draft_study_specific_grounding_met,qa_abstention_rate",
+                        "full_agentic,study_specific_basics,0.9,True,0.0",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            case_metrics_b.write_text(
+                "\n".join(
+                    [
+                        "workflow_variant,question_set_label,draft_required_element_coverage_ratio,draft_study_specific_grounding_met,qa_abstention_rate",
+                        "generic_rag,study_specific_basics,0.7,False,0.2",
+                    ]
+                ),
+                encoding="utf-8",
+            )
             summary_a.write_text(
                 json.dumps(
                     {
@@ -236,7 +256,7 @@ class PipelineNormalizationTests(unittest.TestCase):
                         "case_count": 10,
                         "completed_case_count": 10,
                         "failed_case_count": 0,
-                        "case_metrics_csv": "a.csv",
+                        "case_metrics_csv": str(case_metrics_a),
                         "aggregate_metrics": {
                             "average_draft_required_element_coverage_ratio": 0.8,
                         },
@@ -253,7 +273,7 @@ class PipelineNormalizationTests(unittest.TestCase):
                         "case_count": 10,
                         "completed_case_count": 10,
                         "failed_case_count": 0,
-                        "case_metrics_csv": "b.csv",
+                        "case_metrics_csv": str(case_metrics_b),
                         "aggregate_metrics": {
                             "average_draft_required_element_coverage_ratio": 0.7,
                         },
@@ -270,6 +290,8 @@ class PipelineNormalizationTests(unittest.TestCase):
             self.assertEqual(payload["row_count"], 2)
             self.assertTrue(Path(payload["comparison_csv"]).exists())
             self.assertTrue(Path(payload["comparison_json"]).exists())
+            self.assertTrue(Path(payload["case_rows_csv"]).exists())
+            self.assertTrue(Path(payload["grouped_comparison_csv"]).exists())
 
 
 if __name__ == "__main__":

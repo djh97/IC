@@ -88,6 +88,9 @@ class RetrievalTools:
     def build_personalization_query(self, patient_profile: "PatientProfile", base_template_text: str) -> str:
         return self.pipeline.build_personalization_query(patient_profile, base_template_text)
 
+    def build_study_query_context(self, run_id: str, source_id_filters: list[str] | None) -> dict[str, Any]:
+        return self.pipeline.build_study_query_context(run_id, source_id_filters)
+
     def build_readability_guidance(self, patient_profile: "PatientProfile", *, task_type: str) -> str:
         return self.pipeline.build_readability_guidance(patient_profile, task_type=task_type)
 
