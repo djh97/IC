@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from informed_consent.config import AppConfig, ModelConfig, PathConfig, RetrievalConfig
 from informed_consent.pipeline import ConsentPipeline
 from informed_consent.types import ChunkRecord
 
@@ -28,6 +29,11 @@ class PipelineNormalizationTests(unittest.TestCase):
     def test_normalize_filter_logic_defaults_to_intersection(self) -> None:
         self.assertEqual(self.pipeline.normalize_filter_logic(None), "intersection")
         self.assertEqual(self.pipeline.normalize_filter_logic("invalid"), "intersection")
+
+    def test_normalize_workflow_variant_defaults_to_full_agentic(self) -> None:
+        self.assertEqual(self.pipeline.normalize_workflow_variant(None), "full_agentic")
+        self.assertEqual(self.pipeline.normalize_workflow_variant("GENERIC_RAG"), "generic_rag")
+        self.assertEqual(self.pipeline.normalize_workflow_variant("unknown"), "full_agentic")
 
     def test_chunk_matches_retrieval_filters_intersection_requires_both(self) -> None:
         chunk = ChunkRecord(
@@ -155,8 +161,8 @@ class PipelineNormalizationTests(unittest.TestCase):
                     {
                         "cohort_id": "demo",
                         "studies": [
-                            {"source_id": "NCT03877237"},
-                            {"source_id": "NCT04210375"},
+                            {"source_id": "NCT03877237", "site_id": "HF-SITE-01"},
+                            {"source_id": "NCT04210375", "workflow_variant": "generic_rag"},
                         ],
                     }
                 ),
@@ -185,6 +191,9 @@ class PipelineNormalizationTests(unittest.TestCase):
 
         self.assertEqual(len(expanded_cases), 8)
         self.assertEqual(expanded_cases[0]["retrieval_source_ids"], ["nct03877237"])
+        self.assertEqual(expanded_cases[0]["study_source_id"], "nct03877237")
+        self.assertEqual(expanded_cases[0]["study_id"], "NCT03877237")
+        self.assertEqual(expanded_cases[0]["site_id"], "HF-SITE-01")
         case_ids = {case["case_id"] for case in expanded_cases}
         self.assertIn(
             "nct03877237_example_us_low_literacy_consent_rights_basic",
@@ -194,6 +203,73 @@ class PipelineNormalizationTests(unittest.TestCase):
             "nct04210375_example_us_medium_literacy_study_specific_basics",
             case_ids,
         )
+        generic_rag_cases = [case for case in expanded_cases if case["study_source_id"] == "nct04210375"]
+        self.assertTrue(generic_rag_cases)
+        self.assertTrue(all(case["workflow_variant"] == "generic_rag" for case in generic_rag_cases))
+
+    def test_compare_batch_results_exports_aggregate_table(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            repo_root = Path(__file__).resolve().parents[1]
+            config = AppConfig(
+                models=ModelConfig(endpoint_url="https://example.test"),
+                retrieval=RetrievalConfig(retrieval_mode="lexical"),
+                paths=PathConfig(
+                    project_root=repo_root,
+                    artifact_root=root / "artifacts",
+                    source_data_root=root / "data",
+                    configs_root=repo_root / "configs",
+                    prompts_root=repo_root / "prompts",
+                    docs_root=repo_root / "docs",
+                    scripts_root=repo_root / "scripts",
+                ),
+            )
+            pipeline = ConsentPipeline(config)
+            summary_a = root / "batch_a.json"
+            summary_b = root / "batch_b.json"
+            summary_a.write_text(
+                json.dumps(
+                    {
+                        "batch_id": "full_system",
+                        "batch_run_id": "batch-a",
+                        "reporting_role": "scientific_evaluation",
+                        "case_count": 10,
+                        "completed_case_count": 10,
+                        "failed_case_count": 0,
+                        "case_metrics_csv": "a.csv",
+                        "aggregate_metrics": {
+                            "average_draft_required_element_coverage_ratio": 0.8,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            summary_b.write_text(
+                json.dumps(
+                    {
+                        "batch_id": "generic_rag",
+                        "batch_run_id": "batch-b",
+                        "reporting_role": "baseline",
+                        "case_count": 10,
+                        "completed_case_count": 10,
+                        "failed_case_count": 0,
+                        "case_metrics_csv": "b.csv",
+                        "aggregate_metrics": {
+                            "average_draft_required_element_coverage_ratio": 0.7,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            payload = pipeline.compare_batch_results(
+                [summary_a, summary_b],
+                comparison_id="demo_compare",
+            )
+
+            self.assertEqual(payload["row_count"], 2)
+            self.assertTrue(Path(payload["comparison_csv"]).exists())
+            self.assertTrue(Path(payload["comparison_json"]).exists())
 
 
 if __name__ == "__main__":

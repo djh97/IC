@@ -102,10 +102,12 @@ class ConsentPipeline:
         purpose: str,
         tags: list[str] | None = None,
         notes: str = "",
+        study_id: str | None = None,
+        site_id: str | None = None,
     ) -> RunManifest:
         return self.artifacts.create_run(
-            study_id=self.config.study_id,
-            site_id=self.config.site_id,
+            study_id=study_id or self.config.study_id,
+            site_id=site_id or self.config.site_id,
             purpose=purpose,
             tags=tags,
             notes=notes,
@@ -119,8 +121,16 @@ class ConsentPipeline:
         patient_profile_path: Path | None = None,
         tags: list[str] | None = None,
         notes: str = "",
+        study_id: str | None = None,
+        site_id: str | None = None,
     ) -> RunManifest:
-        manifest = self.initialize_run(purpose=purpose, tags=tags, notes=notes)
+        manifest = self.initialize_run(
+            purpose=purpose,
+            tags=tags,
+            notes=notes,
+            study_id=study_id,
+            site_id=site_id,
+        )
         run_id = manifest.run_id
         started_at = utc_now_iso()
 
@@ -174,6 +184,8 @@ class ConsentPipeline:
         patient_profile_path: Path | None = None,
         tags: list[str] | None = None,
         notes: str = "",
+        study_id: str | None = None,
+        site_id: str | None = None,
     ) -> RunManifest:
         if not source_dir.exists():
             raise FileNotFoundError(f"Source directory does not exist: {source_dir}")
@@ -185,6 +197,8 @@ class ConsentPipeline:
             patient_profile_path=patient_profile_path,
             tags=tags,
             notes=notes,
+            study_id=study_id,
+            site_id=site_id,
         )
         run_id = manifest.run_id
         started_at = utc_now_iso()
@@ -447,6 +461,12 @@ class ConsentPipeline:
             return "intersection"
         return normalized
 
+    def normalize_workflow_variant(self, workflow_variant: str | None) -> str:
+        normalized = str(workflow_variant or "full_agentic").strip().lower()
+        if normalized not in {"full_agentic", "generic_rag", "vanilla_llm"}:
+            return "full_agentic"
+        return normalized
+
     def chunk_matches_retrieval_filters(
         self,
         chunk: ChunkRecord,
@@ -481,6 +501,7 @@ class ConsentPipeline:
         source_group_filters: list[str] | None = None,
         source_id_filters: list[str] | None = None,
         filter_logic: str | None = None,
+        workflow_variant: str | None = None,
         dry_run: bool = False,
     ) -> dict[str, Any]:
         return self.orchestrator_agent.personalize_consent(
@@ -493,6 +514,7 @@ class ConsentPipeline:
             source_group_filters=source_group_filters,
             source_id_filters=source_id_filters,
             filter_logic=filter_logic,
+            workflow_variant=self.normalize_workflow_variant(workflow_variant),
             dry_run=dry_run,
         )
 
@@ -520,6 +542,7 @@ class ConsentPipeline:
         source_group_filters: list[str] | None = None,
         source_id_filters: list[str] | None = None,
         filter_logic: str | None = None,
+        workflow_variant: str | None = None,
         dry_run: bool = False,
     ) -> dict[str, Any]:
         return self.orchestrator_agent.answer_question(
@@ -531,6 +554,7 @@ class ConsentPipeline:
             source_group_filters=source_group_filters,
             source_id_filters=source_id_filters,
             filter_logic=filter_logic,
+            workflow_variant=self.normalize_workflow_variant(workflow_variant),
             dry_run=dry_run,
         )
 
@@ -546,6 +570,7 @@ class ConsentPipeline:
         source_group_filters: list[str] | None = None,
         source_id_filters: list[str] | None = None,
         filter_logic: str | None = None,
+        workflow_variant: str | None = None,
         dry_run: bool = False,
     ) -> dict[str, Any]:
         return self.orchestrator_agent.handle_user_request(
@@ -559,6 +584,7 @@ class ConsentPipeline:
             source_group_filters=source_group_filters,
             source_id_filters=source_id_filters,
             filter_logic=filter_logic,
+            workflow_variant=self.normalize_workflow_variant(workflow_variant),
             dry_run=dry_run,
         )
 
@@ -1122,12 +1148,20 @@ class ConsentPipeline:
         purpose: str,
         tags: list[str] | None = None,
         notes: str = "",
+        study_id: str | None = None,
+        site_id: str | None = None,
     ) -> RunManifest:
         base_run_dir = self.artifacts.runs_dir / base_run_id
         if not base_run_dir.exists():
             raise FileNotFoundError(f"Base run directory does not exist: {base_run_dir}")
 
-        manifest = self.initialize_run(purpose=purpose, tags=tags, notes=notes)
+        manifest = self.initialize_run(
+            purpose=purpose,
+            tags=tags,
+            notes=notes,
+            study_id=study_id,
+            site_id=site_id,
+        )
         run_id = manifest.run_id
         started_at = utc_now_iso()
 
@@ -1185,6 +1219,7 @@ class ConsentPipeline:
         spec = json.loads(spec_path.read_text(encoding="utf-8"))
         batch_label = str(spec.get("batch_id") or "batch_experiment").strip() or "batch_experiment"
         base_run_id = str(base_run_id_override or spec.get("base_run_id", "")).strip()
+        reporting_role = str(spec.get("reporting_role", "evaluation")).strip().lower() or "evaluation"
         if not base_run_id:
             raise ValueError("Batch spec must include a non-empty base_run_id.")
         defaults = spec.get("defaults", {})
@@ -1249,30 +1284,46 @@ class ConsentPipeline:
             retrieval_filter_logic = self.normalize_filter_logic(
                 raw_case.get("retrieval_filter_logic", defaults.get("retrieval_filter_logic"))
             )
+            workflow_variant = self.normalize_workflow_variant(
+                raw_case.get("workflow_variant", defaults.get("workflow_variant"))
+            )
             retrieval_mode = str(raw_case.get("retrieval_mode", defaults.get("retrieval_mode", self.config.retrieval.retrieval_mode))).strip().lower()
             if retrieval_mode not in {"lexical", "dense", "hybrid"}:
                 retrieval_mode = self.config.retrieval.retrieval_mode
             generate_draft = bool(raw_case.get("generate_draft", defaults.get("generate_draft", True)))
             formalize = bool(raw_case.get("formalize", defaults.get("formalize", True)))
             case_notes = str(raw_case.get("notes", defaults.get("notes", "")))
+            study_source_id = self.normalize_source_id_value(
+                raw_case.get("study_source_id")
+                or (retrieval_source_ids[0] if retrieval_source_ids else "")
+            )
+            study_identity = str(raw_case.get("study_id", "")).strip() or (study_source_id.upper() if study_source_id else self.config.study_id)
+            site_identity = str(raw_case.get("site_id", "")).strip() or "PUBLIC-SOURCE"
 
             case_manifest = self.create_case_run_from_corpus(
                 base_run_id=base_run_id,
                 purpose=f"batch_case:{batch_label}:{case_id}",
                 tags=["batch_experiment", batch_label, case_id],
                 notes=case_notes,
+                study_id=study_identity,
+                site_id=site_identity,
             )
             case_run_id = case_manifest.run_id
 
             case_result: dict[str, Any] = {
                 "case_id": case_id,
                 "case_run_id": case_run_id,
+                "study_id": study_identity,
+                "site_id": site_identity,
+                "study_source_id": study_source_id,
+                "reporting_role": reporting_role,
                 "patient_profile_file": str(patient_profile_file),
                 "template_file": str(template_file) if template_file else None,
                 "question_set_file": str(question_set_path) if question_set_path else None,
                 "question_count": len(questions),
                 "dry_run": dry_run,
                 "status": "pending",
+                "workflow_variant": workflow_variant,
                 "retrieval_mode": retrieval_mode,
                 "retrieval_source_groups": retrieval_source_groups,
                 "retrieval_source_ids": retrieval_source_ids,
@@ -1290,6 +1341,7 @@ class ConsentPipeline:
                         source_group_filters=retrieval_source_groups,
                         source_id_filters=retrieval_source_ids,
                         filter_logic=retrieval_filter_logic,
+                        workflow_variant=workflow_variant,
                         dry_run=dry_run,
                     )
                     case_result["draft_output_path"] = draft_payload.get("output_path")
@@ -1314,6 +1366,7 @@ class ConsentPipeline:
                         source_group_filters=retrieval_source_groups,
                         source_id_filters=retrieval_source_ids,
                         filter_logic=retrieval_filter_logic,
+                        workflow_variant=workflow_variant,
                         dry_run=dry_run,
                     )
                     qa_results.append(
@@ -1350,10 +1403,25 @@ class ConsentPipeline:
                         "batch_run_id": batch_run_id,
                         "case_id": case_id,
                         "case_run_id": case_run_id,
+                        "study_id": study_identity,
+                        "study_source_id": study_source_id,
+                        "workflow_variant": workflow_variant,
+                        "reporting_role": reporting_role,
                         "status": case_result["status"],
                         "retrieval_mode": retrieval_mode,
                         "retrieval_filter_logic": retrieval_filter_logic,
                         "question_count": qa_summary.get("question_count", 0),
+                        "qa_answered_question_count": qa_summary.get("answered_question_count"),
+                        "qa_abstained_question_count": qa_summary.get("abstained_question_count"),
+                        "qa_abstention_rate": qa_summary.get("abstention_rate"),
+                        "qa_uncertainty_rate": qa_summary.get("uncertainty_rate"),
+                        "draft_expected_study_specific_grounding": draft_summary.get("expected_study_specific_grounding"),
+                        "draft_study_specific_grounding_met": draft_summary.get("study_specific_grounding_met"),
+                        "draft_study_specific_grounding_gap": draft_summary.get("study_specific_grounding_gap"),
+                        "draft_study_specific_hit_count": draft_summary.get("study_specific_hit_count"),
+                        "draft_regulatory_hit_count": draft_summary.get("regulatory_hit_count"),
+                        "draft_has_study_specific_evidence": draft_summary.get("has_study_specific_evidence"),
+                        "draft_study_specific_hit_ratio": draft_summary.get("study_specific_hit_ratio"),
                         "draft_required_element_coverage_ratio": draft_summary.get("required_element_coverage_ratio"),
                         "draft_citation_marker_coverage_ratio": draft_summary.get("citation_marker_coverage_ratio"),
                         "draft_sentence_citation_coverage_ratio": draft_summary.get("sentence_citation_coverage_ratio"),
@@ -1373,9 +1441,24 @@ class ConsentPipeline:
                         "batch_run_id": batch_run_id,
                         "case_id": case_id,
                         "case_run_id": case_run_id,
+                        "study_id": study_identity,
+                        "study_source_id": study_source_id,
+                        "workflow_variant": workflow_variant,
+                        "reporting_role": reporting_role,
                         "status": case_result["status"],
                         "retrieval_mode": retrieval_mode,
                         "question_count": len(questions),
+                        "qa_answered_question_count": None,
+                        "qa_abstained_question_count": None,
+                        "qa_abstention_rate": None,
+                        "qa_uncertainty_rate": None,
+                        "draft_expected_study_specific_grounding": None,
+                        "draft_study_specific_grounding_met": None,
+                        "draft_study_specific_grounding_gap": None,
+                        "draft_study_specific_hit_count": None,
+                        "draft_regulatory_hit_count": None,
+                        "draft_has_study_specific_evidence": None,
+                        "draft_study_specific_hit_ratio": None,
                         "draft_required_element_coverage_ratio": None,
                         "draft_citation_marker_coverage_ratio": None,
                         "draft_sentence_citation_coverage_ratio": None,
@@ -1393,6 +1476,7 @@ class ConsentPipeline:
             "batch_run_id": batch_run_id,
             "batch_id": batch_label,
             "base_run_id": base_run_id,
+            "reporting_role": reporting_role,
             "case_count": len(case_records),
             "completed_case_count": sum(1 for case in case_records if case.get("status") == "completed"),
             "failed_case_count": sum(1 for case in case_records if case.get("status") == "failed"),
@@ -1410,6 +1494,13 @@ class ConsentPipeline:
         completed_rows = [row for row in metric_rows if row.get("status") == "completed"]
         aggregate_metrics: dict[str, Any] = {}
         for key in (
+            "qa_answered_question_count",
+            "qa_abstained_question_count",
+            "qa_abstention_rate",
+            "qa_uncertainty_rate",
+            "draft_study_specific_hit_count",
+            "draft_regulatory_hit_count",
+            "draft_study_specific_hit_ratio",
             "draft_required_element_coverage_ratio",
             "draft_citation_marker_coverage_ratio",
             "draft_sentence_citation_coverage_ratio",
@@ -1439,9 +1530,89 @@ class ConsentPipeline:
             if schema_repairs
             else None
         )
+        study_specific_flags = [
+            row.get("draft_has_study_specific_evidence")
+            for row in completed_rows
+            if isinstance(row.get("draft_has_study_specific_evidence"), bool)
+        ]
+        aggregate_metrics["draft_study_specific_evidence_case_rate"] = (
+            round(sum(1 for value in study_specific_flags if value) / len(study_specific_flags), 4)
+            if study_specific_flags
+            else None
+        )
+        expected_study_specific_flags = [
+            row.get("draft_expected_study_specific_grounding")
+            for row in completed_rows
+            if isinstance(row.get("draft_expected_study_specific_grounding"), bool)
+        ]
+        aggregate_metrics["draft_expected_study_specific_grounding_case_rate"] = (
+            round(sum(1 for value in expected_study_specific_flags if value) / len(expected_study_specific_flags), 4)
+            if expected_study_specific_flags
+            else None
+        )
+        expected_grounding_rows = [
+            row
+            for row in completed_rows
+            if row.get("draft_expected_study_specific_grounding") is True
+        ]
+        grounding_success_flags = [
+            row.get("draft_study_specific_grounding_met")
+            for row in expected_grounding_rows
+            if isinstance(row.get("draft_study_specific_grounding_met"), bool)
+        ]
+        aggregate_metrics["draft_study_specific_grounding_success_rate"] = (
+            round(sum(1 for value in grounding_success_flags if value) / len(grounding_success_flags), 4)
+            if grounding_success_flags
+            else None
+        )
+        grounding_gap_flags = [
+            row.get("draft_study_specific_grounding_gap")
+            for row in expected_grounding_rows
+            if isinstance(row.get("draft_study_specific_grounding_gap"), bool)
+        ]
+        aggregate_metrics["draft_study_specific_grounding_gap_rate"] = (
+            round(sum(1 for value in grounding_gap_flags if value) / len(grounding_gap_flags), 4)
+            if grounding_gap_flags
+            else None
+        )
         summary_payload["aggregate_metrics"] = aggregate_metrics
         (batch_dir / "batch_summary.json").write_text(json.dumps(summary_payload, indent=2), encoding="utf-8")
         return summary_payload
+
+    def compare_batch_results(self, batch_summary_paths: list[Path], *, comparison_id: str | None = None) -> dict[str, Any]:
+        if len(batch_summary_paths) < 2:
+            raise ValueError("At least two batch summary files are required for comparison.")
+
+        rows: list[dict[str, Any]] = []
+        for summary_path in batch_summary_paths:
+            payload = json.loads(summary_path.read_text(encoding="utf-8"))
+            aggregate_metrics = payload.get("aggregate_metrics", {})
+            if not isinstance(aggregate_metrics, dict):
+                aggregate_metrics = {}
+            rows.append(
+                {
+                    "batch_id": payload.get("batch_id"),
+                    "batch_run_id": payload.get("batch_run_id"),
+                    "reporting_role": payload.get("reporting_role"),
+                    "case_count": payload.get("case_count"),
+                    "completed_case_count": payload.get("completed_case_count"),
+                    "failed_case_count": payload.get("failed_case_count"),
+                    **aggregate_metrics,
+                    "batch_summary_path": str(summary_path.resolve()),
+                    "case_metrics_csv": payload.get("case_metrics_csv"),
+                }
+            )
+
+        comparison_label = re.sub(r"[^a-z0-9]+", "_", (comparison_id or "batch_comparison").lower()).strip("_") or "batch_comparison"
+        csv_path = self.artifacts.write_table_csv(f"{comparison_label}.csv", rows)
+        json_path = self.artifacts.tables_dir / f"{comparison_label}.json"
+        self.artifacts.write_json(json_path, {"comparison_id": comparison_label, "rows": rows})
+        return {
+            "comparison_id": comparison_label,
+            "row_count": len(rows),
+            "comparison_csv": str(csv_path),
+            "comparison_json": str(json_path),
+        }
 
     def plan_public_sources(
         self,
@@ -1826,6 +1997,7 @@ class ConsentPipeline:
             study_generation_query = study.get("generation_query", case_matrix.get("generation_query"))
             study_top_k = study.get("top_k", case_matrix.get("top_k"))
             study_retrieval_mode = study.get("retrieval_mode", case_matrix.get("retrieval_mode"))
+            study_workflow_variant = study.get("workflow_variant", case_matrix.get("workflow_variant"))
             study_filter_logic = study.get("retrieval_filter_logic", case_matrix.get("retrieval_filter_logic"))
             study_source_groups = normalize_string_list(
                 study.get("retrieval_source_groups", case_matrix.get("retrieval_source_groups", []))
@@ -1846,6 +2018,9 @@ class ConsentPipeline:
                     combined_notes = " ".join(part for part in (matrix_notes, study_notes) if part).strip()
                     case_payload: dict[str, Any] = {
                         "case_id": case_id,
+                        "study_source_id": source_id,
+                        "study_id": source_id.upper(),
+                        "site_id": str(study.get("site_id", case_matrix.get("site_id", "PUBLIC-SOURCE"))).strip() or "PUBLIC-SOURCE",
                         "patient_profile_file": patient_profile_file,
                         "question_set_file": question_set_file,
                         "retrieval_source_ids": retrieval_source_ids,
@@ -1860,6 +2035,8 @@ class ConsentPipeline:
                         case_payload["top_k"] = study_top_k
                     if study_retrieval_mode is not None:
                         case_payload["retrieval_mode"] = study_retrieval_mode
+                    if study_workflow_variant is not None:
+                        case_payload["workflow_variant"] = study_workflow_variant
                     if study_filter_logic is not None:
                         case_payload["retrieval_filter_logic"] = study_filter_logic
                     if study_source_groups:

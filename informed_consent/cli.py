@@ -48,6 +48,19 @@ def build_parser() -> ArgumentParser:
     batch_parser.add_argument("--base-run-id", help="Optional prepared corpus run id to override the one in the spec file.")
     batch_parser.add_argument("--dry-run", action="store_true", help="Prepare isolated case runs and request bundles without live model calls.")
 
+    compare_batches_parser = subparsers.add_parser(
+        "compare-batch-results",
+        help="Aggregate multiple saved batch summaries into one comparison table for baseline and ablation reporting.",
+    )
+    compare_batches_parser.add_argument(
+        "--batch-summary",
+        action="append",
+        dest="batch_summaries",
+        required=True,
+        help="Path to a batch_summary.json file. Repeatable.",
+    )
+    compare_batches_parser.add_argument("--comparison-id", help="Optional label for the exported comparison files.")
+
     query_parser = subparsers.add_parser(
         "query-corpus",
         help="Run a retrieval query against a prepared run corpus.",
@@ -73,6 +86,7 @@ def build_parser() -> ArgumentParser:
     draft_parser.add_argument("--source-group", action="append", dest="source_groups", default=[], help="Optional source-group filter. Repeatable.")
     draft_parser.add_argument("--source-id", action="append", dest="source_ids", default=[], help="Optional source-id filter. Repeatable.")
     draft_parser.add_argument("--filter-logic", choices=["intersection", "union"], help="How to combine source-group and source-id filters when both are provided.")
+    draft_parser.add_argument("--workflow-variant", choices=["full_agentic", "generic_rag", "vanilla_llm"], help="Execution mode for draft generation.")
     draft_parser.add_argument("--dry-run", action="store_true", help="Prepare artifacts without making a live model call.")
 
     qa_parser = subparsers.add_parser(
@@ -87,6 +101,7 @@ def build_parser() -> ArgumentParser:
     qa_parser.add_argument("--source-group", action="append", dest="source_groups", default=[], help="Optional source-group filter. Repeatable.")
     qa_parser.add_argument("--source-id", action="append", dest="source_ids", default=[], help="Optional source-id filter. Repeatable.")
     qa_parser.add_argument("--filter-logic", choices=["intersection", "union"], help="How to combine source-group and source-id filters when both are provided.")
+    qa_parser.add_argument("--workflow-variant", choices=["full_agentic", "generic_rag", "vanilla_llm"], help="Execution mode for question answering.")
     qa_parser.add_argument("--dry-run", action="store_true", help="Prepare artifacts without making a live model call.")
 
     formalize_parser = subparsers.add_parser(
@@ -112,6 +127,7 @@ def build_parser() -> ArgumentParser:
     routed_parser.add_argument("--source-group", action="append", dest="source_groups", default=[], help="Optional source-group filter. Repeatable.")
     routed_parser.add_argument("--source-id", action="append", dest="source_ids", default=[], help="Optional source-id filter. Repeatable.")
     routed_parser.add_argument("--filter-logic", choices=["intersection", "union"], help="How to combine source-group and source-id filters when both are provided.")
+    routed_parser.add_argument("--workflow-variant", choices=["full_agentic", "generic_rag", "vanilla_llm"], help="Execution mode for routed generation and question answering.")
     routed_parser.add_argument("--dry-run", action="store_true", help="Prepare artifacts without making a live model call.")
 
     evaluate_parser = subparsers.add_parser(
@@ -224,6 +240,14 @@ def main() -> None:
         print(json.dumps(payload, indent=2))
         return
 
+    if args.command == "compare-batch-results":
+        payload = pipeline.compare_batch_results(
+            [Path(item) for item in args.batch_summaries],
+            comparison_id=args.comparison_id,
+        )
+        print(json.dumps(payload, indent=2))
+        return
+
     if args.command == "query-corpus":
         hits = pipeline.query_prepared_corpus(
             run_id=args.run_id,
@@ -248,6 +272,7 @@ def main() -> None:
             source_group_filters=args.source_groups,
             source_id_filters=args.source_ids,
             filter_logic=args.filter_logic,
+            workflow_variant=args.workflow_variant,
             dry_run=args.dry_run,
         )
         print(json.dumps(payload, indent=2))
@@ -263,6 +288,7 @@ def main() -> None:
             source_group_filters=args.source_groups,
             source_id_filters=args.source_ids,
             filter_logic=args.filter_logic,
+            workflow_variant=args.workflow_variant,
             dry_run=args.dry_run,
         )
         print(json.dumps(payload, indent=2))
@@ -290,6 +316,7 @@ def main() -> None:
             source_group_filters=args.source_groups,
             source_id_filters=args.source_ids,
             filter_logic=args.filter_logic,
+            workflow_variant=args.workflow_variant,
             dry_run=args.dry_run,
         )
         print(json.dumps(payload, indent=2))

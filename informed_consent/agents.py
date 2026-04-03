@@ -545,6 +545,7 @@ class PersonalizationAgent(BaseAgent):
         retrieval_mode: str | None = None,
         source_group_filters: list[str] | None = None,
         source_id_filters: list[str] | None = None,
+        workflow_variant: str = "full_agentic",
         dry_run: bool = False,
         emit_result_to: str | None = None,
     ) -> dict[str, Any]:
@@ -554,30 +555,61 @@ class PersonalizationAgent(BaseAgent):
         study_specific_context = evidence_package["study_specific_context"] or "No study-specific context was available."
         regulatory_context = evidence_package["regulatory_context"] or "No regulatory context was available."
         other_context = evidence_package["other_context"] or "No additional grounding context was available."
+        combined_context = evidence_package.get("combined_context") or "No grounded context was available."
 
         patient_profile_json = json.dumps(asdict(patient_profile), indent=2)
-        user_prompt = self.tools.prompts.render(
-            "personalize_consent_user.txt",
-            {
-                "participant_profile_json": patient_profile_json,
-                "base_template_text": base_template_text or "No base consent template was supplied.",
-                "generation_objective": (
-                    "Produce a grounded personalized informed consent draft that is easy for this participant to understand."
-                ),
-                "readability_guidance": self.tools.retrieval.build_readability_guidance(patient_profile, task_type="draft"),
-                "draft_content_plan_json": json.dumps(draft_content_plan or {}, indent=2),
-                "study_specific_context": study_specific_context,
-                "regulatory_context": regulatory_context,
-                "other_grounding_context": other_context,
-            },
-        )
-        system_prompt = self.tools.prompts.load("personalize_consent_system.txt")
+        readability_guidance = self.tools.retrieval.build_readability_guidance(patient_profile, task_type="draft")
+        if workflow_variant == "generic_rag":
+            user_prompt_filename = "personalize_consent_generic_rag_user.txt"
+            system_prompt_filename = "personalize_consent_baseline_system.txt"
+            user_prompt = self.tools.prompts.render(
+                user_prompt_filename,
+                {
+                    "participant_profile_json": patient_profile_json,
+                    "base_template_text": base_template_text or "No base consent template was supplied.",
+                    "generation_objective": "Produce a participant-facing informed consent draft from the retrieved context.",
+                    "readability_guidance": readability_guidance,
+                    "combined_grounding_context": combined_context,
+                },
+            )
+        elif workflow_variant == "vanilla_llm":
+            user_prompt_filename = "personalize_consent_vanilla_user.txt"
+            system_prompt_filename = "personalize_consent_baseline_system.txt"
+            user_prompt = self.tools.prompts.render(
+                user_prompt_filename,
+                {
+                    "participant_profile_json": patient_profile_json,
+                    "base_template_text": base_template_text or "No base consent template was supplied.",
+                    "generation_objective": "Produce a participant-facing informed consent draft using the participant profile and template only.",
+                    "readability_guidance": readability_guidance,
+                },
+            )
+        else:
+            user_prompt_filename = "personalize_consent_user.txt"
+            system_prompt_filename = "personalize_consent_system.txt"
+            user_prompt = self.tools.prompts.render(
+                user_prompt_filename,
+                {
+                    "participant_profile_json": patient_profile_json,
+                    "base_template_text": base_template_text or "No base consent template was supplied.",
+                    "generation_objective": (
+                        "Produce a grounded personalized informed consent draft that is easy for this participant to understand."
+                    ),
+                    "readability_guidance": readability_guidance,
+                    "draft_content_plan_json": json.dumps(draft_content_plan or {}, indent=2),
+                    "study_specific_context": study_specific_context,
+                    "regulatory_context": regulatory_context,
+                    "other_grounding_context": other_context,
+                },
+            )
+        system_prompt = self.tools.prompts.load(system_prompt_filename)
 
         request_bundle = {
             "agent": self.agent_label,
             "run_id": run_id,
             "patient_profile": asdict(patient_profile),
             "generation_query": generation_query,
+            "workflow_variant": workflow_variant,
             "draft_content_plan": draft_content_plan or {},
             "top_k": top_k or self.runtime.config.retrieval.top_k,
             "retrieval_mode_used": retrieval_artifacts["mode_used"],
@@ -590,8 +622,8 @@ class PersonalizationAgent(BaseAgent):
             "dense_hits": retrieval_artifacts["dense_hits"],
             "retrieval_hits": retrieval_hits,
             "evidence_package": evidence_package,
-            "system_prompt_path": str(self.tools.prompts.path("personalize_consent_system.txt")),
-            "user_prompt_path": str(self.tools.prompts.path("personalize_consent_user.txt")),
+            "system_prompt_path": str(self.tools.prompts.path(system_prompt_filename)),
+            "user_prompt_path": str(self.tools.prompts.path(user_prompt_filename)),
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -645,6 +677,7 @@ class PersonalizationAgent(BaseAgent):
             "retrieval_hit_count": len(retrieval_hits),
             "generation_query": generation_query,
             "retrieval_mode_used": retrieval_artifacts["mode_used"],
+            "workflow_variant": workflow_variant,
             "dry_run": dry_run,
             "draft_generated": response_payload is not None,
             "draft_output_path": output_path,
@@ -668,6 +701,7 @@ class PersonalizationAgent(BaseAgent):
                 "patient_profile_path": str(patient_profile_path) if patient_profile_path else None,
                 "template_path": str(template_path) if template_path else None,
                 "generation_query": generation_query,
+                "workflow_variant": workflow_variant,
                 "top_k": top_k or self.runtime.config.retrieval.top_k,
                 "retrieval_mode": retrieval_mode or self.runtime.config.retrieval.retrieval_mode,
                 "source_group_filters": source_group_filters or [],
@@ -864,6 +898,7 @@ class ConversationalAgent(BaseAgent):
         retrieval_mode: str | None = None,
         source_group_filters: list[str] | None = None,
         source_id_filters: list[str] | None = None,
+        workflow_variant: str = "full_agentic",
         dry_run: bool = False,
         emit_result_to: str | None = None,
     ) -> dict[str, Any]:
@@ -877,22 +912,50 @@ class ConversationalAgent(BaseAgent):
         study_specific_context = evidence_package["study_specific_context"] or "No study-specific context was available."
         regulatory_context = evidence_package["regulatory_context"] or "No regulatory context was available."
         other_context = evidence_package["other_context"] or "No additional grounding context was available."
+        combined_context = evidence_package.get("combined_context") or "No grounded context was available."
         question_id = self.tools.retrieval.build_question_id(question)
         qa_dir = self.tools.artifacts.run_path(run_id, "outputs", "qa")
         qa_dir.mkdir(parents=True, exist_ok=True)
 
-        user_prompt = self.tools.prompts.render(
-            "qa_consent_user.txt",
-            {
-                "participant_profile_json": json.dumps(asdict(patient_profile), indent=2),
-                "participant_question": question,
-                "readability_guidance": self.tools.retrieval.build_readability_guidance(patient_profile, task_type="qa"),
-                "study_specific_context": study_specific_context,
-                "regulatory_context": regulatory_context,
-                "other_grounding_context": other_context,
-            },
-        )
-        system_prompt = self.tools.prompts.load("qa_consent_system.txt")
+        readability_guidance = self.tools.retrieval.build_readability_guidance(patient_profile, task_type="qa")
+        if workflow_variant == "generic_rag":
+            user_prompt_filename = "qa_consent_generic_rag_user.txt"
+            system_prompt_filename = "qa_consent_baseline_system.txt"
+            user_prompt = self.tools.prompts.render(
+                user_prompt_filename,
+                {
+                    "participant_profile_json": json.dumps(asdict(patient_profile), indent=2),
+                    "participant_question": question,
+                    "readability_guidance": readability_guidance,
+                    "combined_grounding_context": combined_context,
+                },
+            )
+        elif workflow_variant == "vanilla_llm":
+            user_prompt_filename = "qa_consent_vanilla_user.txt"
+            system_prompt_filename = "qa_consent_baseline_system.txt"
+            user_prompt = self.tools.prompts.render(
+                user_prompt_filename,
+                {
+                    "participant_profile_json": json.dumps(asdict(patient_profile), indent=2),
+                    "participant_question": question,
+                    "readability_guidance": readability_guidance,
+                },
+            )
+        else:
+            user_prompt_filename = "qa_consent_user.txt"
+            system_prompt_filename = "qa_consent_system.txt"
+            user_prompt = self.tools.prompts.render(
+                user_prompt_filename,
+                {
+                    "participant_profile_json": json.dumps(asdict(patient_profile), indent=2),
+                    "participant_question": question,
+                    "readability_guidance": readability_guidance,
+                    "study_specific_context": study_specific_context,
+                    "regulatory_context": regulatory_context,
+                    "other_grounding_context": other_context,
+                },
+            )
+        system_prompt = self.tools.prompts.load(system_prompt_filename)
 
         request_bundle = {
             "agent": self.agent_label,
@@ -900,6 +963,7 @@ class ConversationalAgent(BaseAgent):
             "question_id": question_id,
             "question": question,
             "patient_profile": asdict(patient_profile),
+            "workflow_variant": workflow_variant,
             "top_k": top_k or self.runtime.config.retrieval.top_k,
             "retrieval_mode_used": retrieval_artifacts["mode_used"],
             "dense_retrieval_available": retrieval_artifacts["dense_available"],
@@ -911,8 +975,8 @@ class ConversationalAgent(BaseAgent):
             "dense_hits": retrieval_artifacts["dense_hits"],
             "retrieval_hits": retrieval_hits,
             "evidence_package": evidence_package,
-            "system_prompt_path": str(self.tools.prompts.path("qa_consent_system.txt")),
-            "user_prompt_path": str(self.tools.prompts.path("qa_consent_user.txt")),
+            "system_prompt_path": str(self.tools.prompts.path(system_prompt_filename)),
+            "user_prompt_path": str(self.tools.prompts.path(user_prompt_filename)),
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -967,6 +1031,7 @@ class ConversationalAgent(BaseAgent):
             "question_id": question_id,
             "retrieval_hit_count": len(retrieval_hits),
             "retrieval_mode_used": retrieval_artifacts["mode_used"],
+            "workflow_variant": workflow_variant,
             "dry_run": dry_run,
             "answer_generated": response_payload is not None,
             "answer_output_path": output_path,
@@ -988,6 +1053,7 @@ class ConversationalAgent(BaseAgent):
                 "question_id": question_id,
                 "question": question,
                 "patient_profile_path": str(patient_profile_path) if patient_profile_path else None,
+                "workflow_variant": workflow_variant,
                 "top_k": top_k or self.runtime.config.retrieval.top_k,
                 "retrieval_mode": retrieval_mode or self.runtime.config.retrieval.retrieval_mode,
                 "source_group_filters": source_group_filters or [],
@@ -1004,8 +1070,11 @@ class ConversationalAgent(BaseAgent):
             "question_id": question_id,
             "question": question,
             "retrieval_hits_path": str(retrieval_path),
+            "evidence_package_path": str(evidence_package_path),
             "request_bundle_path": str(request_path),
             "answer_path": output_path,
+            "workflow_variant": workflow_variant,
+            "status": "answered" if output_path else "prepared",
             "dry_run": dry_run,
         }
         self.tools.retrieval.upsert_qa_index_entry(qa_dir / "qa_index.jsonl", index_entry)
@@ -1180,6 +1249,36 @@ class OrchestratorAgent(BaseAgent):
     def llm_planning_available(self) -> bool:
         return bool(self.runtime.config.models.endpoint_url)
 
+    def normalize_workflow_variant(self, workflow_variant: str | None) -> str:
+        normalized = str(workflow_variant or "full_agentic").strip().lower()
+        if normalized not in {"full_agentic", "generic_rag", "vanilla_llm"}:
+            return "full_agentic"
+        return normalized
+
+    def build_empty_retrieval_artifacts(
+        self,
+        *,
+        source_group_filters: list[str] | None = None,
+        source_id_filters: list[str] | None = None,
+        filter_logic: str | None = None,
+    ) -> dict[str, Any]:
+        retrieval_hits: list[dict[str, Any]] = []
+        evidence_package = self.tools.retrieval.build_evidence_package(retrieval_hits)
+        return {
+            "mode_used": "none",
+            "dense_available": False,
+            "lexical_hits": [],
+            "dense_hits": [],
+            "retrieval_hits": retrieval_hits,
+            "retrieved_context": "",
+            "citation_map": [],
+            "evidence_package": evidence_package,
+            "source_group_filters": list(source_group_filters or []),
+            "source_id_filters": list(source_id_filters or []),
+            "filter_logic_used": filter_logic or "intersection",
+            "filtered_chunk_count": 0,
+        }
+
     def classify_user_request_fallback(
         self,
         *,
@@ -1332,6 +1431,19 @@ class OrchestratorAgent(BaseAgent):
     ) -> dict[str, Any]:
         planned_source_groups = list(source_group_filters or ["regulatory_guidance", "trial_materials"])
         planned_filter_logic = filter_logic or ("union" if source_group_filters or source_id_filters else "union")
+        required_source_groups: list[str] = []
+        if "regulatory_guidance" in planned_source_groups:
+            required_source_groups.append("regulatory_guidance")
+        if "trial_materials" in planned_source_groups or bool(source_id_filters):
+            required_source_groups.append("trial_materials")
+        if not required_source_groups:
+            required_source_groups = ["regulatory_guidance"]
+
+        preferred_source_groups = [
+            source_group
+            for source_group in ("trial_materials", "regulatory_guidance")
+            if source_group in planned_source_groups or source_group in required_source_groups
+        ]
         return {
             "query": generation_query or self.tools.retrieval.build_personalization_query(patient_profile, base_template_text),
             "top_k": top_k or self.runtime.config.retrieval.top_k,
@@ -1339,8 +1451,40 @@ class OrchestratorAgent(BaseAgent):
             "source_group_filters": planned_source_groups,
             "source_id_filters": list(source_id_filters or []),
             "filter_logic": planned_filter_logic,
-            "required_source_groups": ["regulatory_guidance"],
-            "preferred_source_groups": ["trial_materials"],
+            "required_source_groups": required_source_groups,
+            "preferred_source_groups": preferred_source_groups,
+        }
+
+    def build_study_specific_personalization_enrichment_plan(
+        self,
+        *,
+        retrieval_plan: dict[str, Any],
+        retrieval_artifacts: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        source_group_filters = list(retrieval_plan.get("source_group_filters", []))
+        source_id_filters = list(retrieval_plan.get("source_id_filters", []))
+        if "trial_materials" not in source_group_filters and not source_id_filters:
+            return None
+
+        current_study_hits = int(retrieval_artifacts.get("evidence_package", {}).get("role_counts", {}).get("study_specific", 0))
+        minimum_study_hits = 2 if source_id_filters else 1
+        if current_study_hits >= minimum_study_hits:
+            return None
+
+        query_parts = [
+            str(retrieval_plan.get("query", "")).strip(),
+            "study purpose procedures intervention visits schedule eligibility study specific details",
+        ]
+        enrichment_query = " | ".join(part for part in query_parts if part)
+        return {
+            "query": enrichment_query,
+            "top_k": max(int(retrieval_plan.get("top_k", self.runtime.config.retrieval.top_k)), 6),
+            "retrieval_mode": retrieval_plan.get("retrieval_mode", self.runtime.config.retrieval.retrieval_mode),
+            "source_group_filters": ["trial_materials"],
+            "source_id_filters": source_id_filters,
+            "filter_logic": "union",
+            "minimum_study_specific_hits": minimum_study_hits,
+            "current_study_specific_hits": current_study_hits,
         }
 
     def plan_draft_content_fallback(
@@ -1962,9 +2106,11 @@ class OrchestratorAgent(BaseAgent):
         source_group_filters: list[str] | None = None,
         source_id_filters: list[str] | None = None,
         filter_logic: str | None = None,
+        workflow_variant: str = "full_agentic",
         dry_run: bool = False,
     ) -> dict[str, Any]:
         started_at = utc_now_iso()
+        workflow_variant = self.normalize_workflow_variant(workflow_variant)
         patient_profile = self.tools.state.resolve_patient_profile(run_id, patient_profile_path)
         base_template_text = self.tools.state.resolve_base_template_text(run_id, template_path)
         retrieval_plan = self.plan_personalization_grounding(
@@ -1978,98 +2124,176 @@ class OrchestratorAgent(BaseAgent):
             filter_logic=filter_logic,
         )
         query = retrieval_plan["query"]
+        orchestrator_to_rag_path: str | None = None
+        study_enrichment_plan_path: str | None = None
+        study_enrichment_hits_path: str | None = None
+        study_enrichment_evidence_package_path: str | None = None
+        study_enrichment_request_handoff_path: str | None = None
+        study_enrichment_result_handoff_path: str | None = None
 
-        orchestrator_to_rag = self.emit_handoff(
-            run_id,
-            to_agent=self.rag_agent.agent_label,
-            purpose="personalization_grounding_request",
-            payload={
-                "query": query,
-                "top_k": retrieval_plan["top_k"],
-                "retrieval_mode": retrieval_plan["retrieval_mode"],
-                "source_group_filters": retrieval_plan["source_group_filters"],
-                "source_id_filters": retrieval_plan["source_id_filters"],
-                "filter_logic": retrieval_plan["filter_logic"],
-                "participant_profile": {
-                    "participant_id": patient_profile.participant_id,
-                    "health_literacy": patient_profile.health_literacy,
-                    "language": patient_profile.language,
-                    "jurisdiction": patient_profile.jurisdiction,
-                },
-                "base_template_present": bool(base_template_text),
-            },
-        )
-        retrieval_artifacts = self.rag_agent.retrieve_evidence(
-            run_id=run_id,
-            query=query,
-            top_k=retrieval_plan["top_k"],
-            retrieval_mode=retrieval_plan["retrieval_mode"],
-            source_group_filters=retrieval_plan["source_group_filters"],
-            source_id_filters=retrieval_plan["source_id_filters"],
-            filter_logic=retrieval_plan["filter_logic"],
-            purpose="personalization_grounding",
-            emit_result_to=self.agent_label,
-        )
-        sufficiency = self.assess_evidence_sufficiency(
-            retrieval_artifacts=retrieval_artifacts,
-            required_source_groups=retrieval_plan["required_source_groups"],
-        )
-        if not sufficiency["sufficient"]:
-            clarification = self.build_clarification_response(
-                run_id=run_id,
-                reason="insufficient_personalization_evidence",
-                message=(
-                    "The orchestrator could not find enough grounded evidence to safely draft the personalized consent."
-                ),
-                missing_required_source_groups=sufficiency["missing_required_source_groups"],
-                suggested_actions=[
-                    "Add or fetch the missing study or regulatory sources for this run.",
-                    "Retry with broader source filters or a study-specific source id.",
-                ],
+        if workflow_variant == "vanilla_llm":
+            retrieval_artifacts = self.build_empty_retrieval_artifacts(
+                source_group_filters=retrieval_plan["source_group_filters"],
+                source_id_filters=retrieval_plan["source_id_filters"],
+                filter_logic=retrieval_plan["filter_logic"],
             )
+        else:
+            orchestrator_to_rag = self.emit_handoff(
+                run_id,
+                to_agent=self.rag_agent.agent_label,
+                purpose="personalization_grounding_request",
+                payload={
+                    "query": query,
+                    "top_k": retrieval_plan["top_k"],
+                    "retrieval_mode": retrieval_plan["retrieval_mode"],
+                    "source_group_filters": retrieval_plan["source_group_filters"],
+                    "source_id_filters": retrieval_plan["source_id_filters"],
+                    "filter_logic": retrieval_plan["filter_logic"],
+                    "workflow_variant": workflow_variant,
+                    "participant_profile": {
+                        "participant_id": patient_profile.participant_id,
+                        "health_literacy": patient_profile.health_literacy,
+                        "language": patient_profile.language,
+                        "jurisdiction": patient_profile.jurisdiction,
+                    },
+                    "base_template_present": bool(base_template_text),
+                },
+            )
+            orchestrator_to_rag_path = orchestrator_to_rag["path"]
+            retrieval_artifacts = self.rag_agent.retrieve_evidence(
+                run_id=run_id,
+                query=query,
+                top_k=retrieval_plan["top_k"],
+                retrieval_mode=retrieval_plan["retrieval_mode"],
+                source_group_filters=retrieval_plan["source_group_filters"],
+                source_id_filters=retrieval_plan["source_id_filters"],
+                filter_logic=retrieval_plan["filter_logic"],
+                purpose="personalization_grounding",
+                emit_result_to=self.agent_label,
+            )
+
+            if workflow_variant == "full_agentic":
+                study_enrichment_plan = self.build_study_specific_personalization_enrichment_plan(
+                    retrieval_plan=retrieval_plan,
+                    retrieval_artifacts=retrieval_artifacts,
+                )
+                if study_enrichment_plan:
+                    enrichment_started_at = utc_now_iso()
+                    study_enrichment_plan_file = self.tools.artifacts.run_path(run_id, "outputs", "draft_study_enrichment_plan.json")
+                    self.tools.artifacts.write_json(study_enrichment_plan_file, study_enrichment_plan)
+                    study_enrichment_plan_path = str(study_enrichment_plan_file)
+                    enrichment_request_handoff = self.emit_handoff(
+                        run_id,
+                        to_agent=self.rag_agent.agent_label,
+                        purpose="draft_study_specific_enrichment_request",
+                        payload=study_enrichment_plan,
+                    )
+                    study_enrichment_request_handoff_path = enrichment_request_handoff["path"]
+                    enrichment_retrieval = self.rag_agent.retrieve_evidence(
+                        run_id=run_id,
+                        query=study_enrichment_plan["query"],
+                        top_k=study_enrichment_plan["top_k"],
+                        retrieval_mode=study_enrichment_plan["retrieval_mode"],
+                        source_group_filters=study_enrichment_plan["source_group_filters"],
+                        source_id_filters=study_enrichment_plan["source_id_filters"],
+                        filter_logic=study_enrichment_plan["filter_logic"],
+                        purpose="draft_study_specific_enrichment",
+                        emit_result_to=self.agent_label,
+                    )
+                    study_enrichment_result_handoff_path = enrichment_retrieval.get("result_handoff_path")
+                    retrieval_artifacts = self.merge_retrieval_artifacts(
+                        primary_artifacts=retrieval_artifacts,
+                        recovery_artifacts=enrichment_retrieval,
+                    )
+                    enrichment_hits_file = self.tools.artifacts.run_path(run_id, "outputs", "draft_study_enrichment_hits.json")
+                    enrichment_evidence_file = self.tools.artifacts.run_path(run_id, "outputs", "draft_study_enrichment_merged_evidence_package.json")
+                    self.tools.artifacts.write_json(enrichment_hits_file, enrichment_retrieval["retrieval_hits"])
+                    self.tools.artifacts.write_json(enrichment_evidence_file, retrieval_artifacts["evidence_package"])
+                    study_enrichment_hits_path = str(enrichment_hits_file)
+                    study_enrichment_evidence_package_path = str(enrichment_evidence_file)
+                    self.record_stage(
+                        run_id,
+                        stage_name="enrich_personalization_study_grounding",
+                        status="completed",
+                        started_at=enrichment_started_at,
+                        ended_at=utc_now_iso(),
+                        outputs={
+                            "study_enrichment_plan_path": study_enrichment_plan_path,
+                            "study_enrichment_hits_path": study_enrichment_hits_path,
+                            "study_enrichment_evidence_package_path": study_enrichment_evidence_package_path,
+                            "study_specific_hit_count_after_enrichment": retrieval_artifacts["evidence_package"]["role_counts"]["study_specific"],
+                            "study_enrichment_request_handoff_path": study_enrichment_request_handoff_path,
+                            "study_enrichment_result_handoff_path": study_enrichment_result_handoff_path,
+                        },
+                        notes="The orchestrator ran an additional trial-material retrieval pass to strengthen study-specific grounding before draft generation.",
+                    )
+
+            if workflow_variant == "full_agentic":
+                sufficiency = self.assess_evidence_sufficiency(
+                    retrieval_artifacts=retrieval_artifacts,
+                    required_source_groups=retrieval_plan["required_source_groups"],
+                )
+                if not sufficiency["sufficient"]:
+                    clarification = self.build_clarification_response(
+                        run_id=run_id,
+                        reason="insufficient_personalization_evidence",
+                        message=(
+                            "The orchestrator could not find enough grounded evidence to safely draft the personalized consent."
+                        ),
+                        missing_required_source_groups=sufficiency["missing_required_source_groups"],
+                        suggested_actions=[
+                            "Add or fetch the missing study or regulatory sources for this run.",
+                            "Retry with broader source filters or a study-specific source id.",
+                        ],
+                    )
+                    self.record_stage(
+                        run_id,
+                        stage_name="personalize_consent",
+                        status="clarification_requested",
+                        started_at=started_at,
+                        ended_at=utc_now_iso(),
+                        inputs={
+                            "patient_profile_path": str(patient_profile_path) if patient_profile_path else None,
+                            "template_path": str(template_path) if template_path else None,
+                            "generation_query": generation_query,
+                            "workflow_variant": workflow_variant,
+                        },
+                        outputs={
+                            "clarification_reason": clarification["reason"],
+                            "missing_required_source_groups": clarification["missing_required_source_groups"],
+                            "observed_source_groups": sufficiency["observed_source_groups"],
+                        },
+                        notes="The orchestrator paused instead of drafting because the grounding evidence was incomplete.",
+                    )
+                    return clarification
+
+        draft_content_plan: dict[str, Any] | None = None
+        draft_content_plan_path: str | None = None
+        if workflow_variant == "full_agentic":
+            draft_content_plan = self.plan_draft_content(
+                patient_profile=patient_profile,
+                base_template_text=base_template_text,
+                retrieval_artifacts=retrieval_artifacts,
+                generation_query=query,
+                use_llm=not dry_run,
+            )
+            draft_content_plan_file = self.tools.artifacts.run_path(run_id, "outputs", "draft_content_plan.json")
+            self.tools.artifacts.write_json(draft_content_plan_file, draft_content_plan)
+            draft_content_plan_path = str(draft_content_plan_file)
             self.record_stage(
                 run_id,
-                stage_name="personalize_consent",
-                status="clarification_requested",
+                stage_name="plan_draft_content",
+                status="completed",
                 started_at=started_at,
                 ended_at=utc_now_iso(),
-                inputs={
-                    "patient_profile_path": str(patient_profile_path) if patient_profile_path else None,
-                    "template_path": str(template_path) if template_path else None,
-                    "generation_query": generation_query,
-                },
                 outputs={
-                    "clarification_reason": clarification["reason"],
-                    "missing_required_source_groups": clarification["missing_required_source_groups"],
-                    "observed_source_groups": sufficiency["observed_source_groups"],
+                    "draft_content_plan_path": draft_content_plan_path,
+                    "planning_mode": draft_content_plan.get("planning_mode"),
+                    "planning_reason": draft_content_plan.get("planning_reason"),
+                    "element_count": len(draft_content_plan.get("elements", [])),
                 },
-                notes="The orchestrator paused instead of drafting because the grounding evidence was incomplete.",
+                notes="The orchestrator produced a per-element content plan to guide grounded draft generation.",
             )
-            return clarification
-
-        draft_content_plan = self.plan_draft_content(
-            patient_profile=patient_profile,
-            base_template_text=base_template_text,
-            retrieval_artifacts=retrieval_artifacts,
-            generation_query=query,
-            use_llm=not dry_run,
-        )
-        draft_content_plan_path = self.tools.artifacts.run_path(run_id, "outputs", "draft_content_plan.json")
-        self.tools.artifacts.write_json(draft_content_plan_path, draft_content_plan)
-        self.record_stage(
-            run_id,
-            stage_name="plan_draft_content",
-            status="completed",
-            started_at=started_at,
-            ended_at=utc_now_iso(),
-            outputs={
-                "draft_content_plan_path": str(draft_content_plan_path),
-                "planning_mode": draft_content_plan.get("planning_mode"),
-                "planning_reason": draft_content_plan.get("planning_reason"),
-                "element_count": len(draft_content_plan.get("elements", [])),
-            },
-            notes="The orchestrator produced a per-element content plan to guide grounded draft generation.",
-        )
 
         orchestrator_to_personalization = self.emit_handoff(
             run_id,
@@ -2077,13 +2301,14 @@ class OrchestratorAgent(BaseAgent):
             purpose="personalized_consent_draft_request",
             payload={
                 "generation_query": query,
+                "workflow_variant": workflow_variant,
                 "retrieval_hit_count": len(retrieval_artifacts["retrieval_hits"]),
                 "retrieval_mode_used": retrieval_artifacts["mode_used"],
-                "draft_content_plan_path": str(draft_content_plan_path),
-                "draft_content_plan_mode": draft_content_plan.get("planning_mode"),
+                "draft_content_plan_path": draft_content_plan_path,
+                "draft_content_plan_mode": draft_content_plan.get("planning_mode") if isinstance(draft_content_plan, dict) else None,
                 "unsupported_elements": [
                     item["element_id"]
-                    for item in draft_content_plan.get("elements", [])
+                    for item in (draft_content_plan.get("elements", []) if isinstance(draft_content_plan, dict) else [])
                     if isinstance(item, dict) and item.get("status") == "unsupported"
                 ],
                 "base_template_present": bool(base_template_text),
@@ -2108,6 +2333,7 @@ class OrchestratorAgent(BaseAgent):
             retrieval_mode=retrieval_plan["retrieval_mode"],
             source_group_filters=retrieval_plan["source_group_filters"],
             source_id_filters=retrieval_plan["source_id_filters"],
+            workflow_variant=workflow_variant,
             dry_run=dry_run,
             emit_result_to=self.agent_label,
         )
@@ -2130,7 +2356,7 @@ class OrchestratorAgent(BaseAgent):
         recovery_request_handoff_path: str | None = None
         recovery_result_handoff_path: str | None = None
 
-        if not dry_run and draft_payload.get("response") is not None:
+        if workflow_variant == "full_agentic" and not dry_run and draft_payload.get("response") is not None:
             initial_response = draft_payload["response"]
             initial_audit = self.audit_draft_quality(
                 run_id=run_id,
@@ -2383,8 +2609,8 @@ class OrchestratorAgent(BaseAgent):
             draft_payload["response"] = dict(selected_response)
             draft_payload["response"]["revision_metadata"] = revision_metadata
             draft_payload["output_path"] = final_output_path
-        draft_payload["draft_content_plan_path"] = str(draft_content_plan_path)
-        draft_payload["draft_content_plan_mode"] = draft_content_plan.get("planning_mode")
+        draft_payload["draft_content_plan_path"] = draft_content_plan_path
+        draft_payload["draft_content_plan_mode"] = draft_content_plan.get("planning_mode") if isinstance(draft_content_plan, dict) else None
         draft_payload["decision_path"] = decision_path
 
         self.record_stage(
@@ -2397,6 +2623,7 @@ class OrchestratorAgent(BaseAgent):
                 "patient_profile_path": str(patient_profile_path) if patient_profile_path else None,
                 "template_path": str(template_path) if template_path else None,
                 "generation_query": generation_query,
+                "workflow_variant": workflow_variant,
                 "top_k": retrieval_plan["top_k"],
                 "retrieval_mode": retrieval_plan["retrieval_mode"],
                 "source_group_filters": retrieval_plan["source_group_filters"],
@@ -2406,11 +2633,16 @@ class OrchestratorAgent(BaseAgent):
             outputs={
                 "draft_output_path": final_output_path,
                 "request_bundle_path": final_request_bundle_path,
-                "orchestrator_to_rag_handoff_path": orchestrator_to_rag["path"],
+                "orchestrator_to_rag_handoff_path": orchestrator_to_rag_path,
                 "orchestrator_to_personalization_handoff_path": orchestrator_to_personalization["path"],
                 "personalization_result_handoff_path": draft_payload.get("agent_handoff_path"),
-                "draft_content_plan_path": str(draft_content_plan_path),
-                "draft_content_plan_mode": draft_content_plan.get("planning_mode"),
+                "draft_content_plan_path": draft_content_plan_path,
+                "draft_content_plan_mode": draft_content_plan.get("planning_mode") if isinstance(draft_content_plan, dict) else None,
+                "study_enrichment_plan_path": study_enrichment_plan_path,
+                "study_enrichment_hits_path": study_enrichment_hits_path,
+                "study_enrichment_evidence_package_path": study_enrichment_evidence_package_path,
+                "study_enrichment_request_handoff_path": study_enrichment_request_handoff_path,
+                "study_enrichment_result_handoff_path": study_enrichment_result_handoff_path,
                 "initial_audit_path": initial_audit_path,
                 "revision_audit_path": revision_audit_path,
                 "decision_path": decision_path,
@@ -2443,9 +2675,11 @@ class OrchestratorAgent(BaseAgent):
         source_group_filters: list[str] | None = None,
         source_id_filters: list[str] | None = None,
         filter_logic: str | None = None,
+        workflow_variant: str = "full_agentic",
         dry_run: bool = False,
     ) -> dict[str, Any]:
         started_at = utc_now_iso()
+        workflow_variant = self.normalize_workflow_variant(workflow_variant)
         patient_profile = self.tools.state.resolve_patient_profile(run_id, patient_profile_path)
         question_id = self.tools.retrieval.build_question_id(question)
         retrieval_plan = self.plan_question_grounding(
@@ -2455,49 +2689,59 @@ class OrchestratorAgent(BaseAgent):
             source_group_filters=source_group_filters,
             source_id_filters=source_id_filters,
             filter_logic=filter_logic,
-            use_llm=not dry_run,
+            use_llm=workflow_variant == "full_agentic" and not dry_run,
         )
 
-        orchestrator_to_rag = self.emit_handoff(
-            run_id,
-            to_agent=self.rag_agent.agent_label,
-            purpose="question_answer_grounding_request",
-            payload={
-                "question_id": question_id,
-                "question": question,
-                "retrieval_query": retrieval_plan["query"],
-                "top_k": retrieval_plan["top_k"],
-                "retrieval_mode": retrieval_plan["retrieval_mode"],
-                "source_group_filters": retrieval_plan["source_group_filters"],
-                "source_id_filters": retrieval_plan["source_id_filters"],
-                "filter_logic": retrieval_plan["filter_logic"],
-                "question_profile": retrieval_plan["question_profile"],
-                "planning_mode": retrieval_plan.get("planning_mode"),
-                "planning_reason": retrieval_plan.get("planning_reason"),
-                "participant_profile": {
-                    "participant_id": patient_profile.participant_id,
-                    "health_literacy": patient_profile.health_literacy,
-                    "language": patient_profile.language,
-                    "jurisdiction": patient_profile.jurisdiction,
+        orchestrator_to_rag_path: str | None = None
+        if workflow_variant == "vanilla_llm":
+            retrieval_artifacts = self.build_empty_retrieval_artifacts(
+                source_group_filters=retrieval_plan["source_group_filters"],
+                source_id_filters=retrieval_plan["source_id_filters"],
+                filter_logic=retrieval_plan["filter_logic"],
+            )
+        else:
+            orchestrator_to_rag = self.emit_handoff(
+                run_id,
+                to_agent=self.rag_agent.agent_label,
+                purpose="question_answer_grounding_request",
+                payload={
+                    "question_id": question_id,
+                    "question": question,
+                    "retrieval_query": retrieval_plan["query"],
+                    "top_k": retrieval_plan["top_k"],
+                    "retrieval_mode": retrieval_plan["retrieval_mode"],
+                    "source_group_filters": retrieval_plan["source_group_filters"],
+                    "source_id_filters": retrieval_plan["source_id_filters"],
+                    "filter_logic": retrieval_plan["filter_logic"],
+                    "question_profile": retrieval_plan["question_profile"],
+                    "workflow_variant": workflow_variant,
+                    "planning_mode": retrieval_plan.get("planning_mode"),
+                    "planning_reason": retrieval_plan.get("planning_reason"),
+                    "participant_profile": {
+                        "participant_id": patient_profile.participant_id,
+                        "health_literacy": patient_profile.health_literacy,
+                        "language": patient_profile.language,
+                        "jurisdiction": patient_profile.jurisdiction,
+                    },
                 },
-            },
-        )
-        retrieval_artifacts = self.rag_agent.retrieve_evidence(
-            run_id=run_id,
-            query=retrieval_plan["query"],
-            top_k=retrieval_plan["top_k"],
-            retrieval_mode=retrieval_plan["retrieval_mode"],
-            source_group_filters=retrieval_plan["source_group_filters"],
-            source_id_filters=retrieval_plan["source_id_filters"],
-            filter_logic=retrieval_plan["filter_logic"],
-            purpose="question_answer_grounding",
-            emit_result_to=self.agent_label,
-        )
+            )
+            orchestrator_to_rag_path = orchestrator_to_rag["path"]
+            retrieval_artifacts = self.rag_agent.retrieve_evidence(
+                run_id=run_id,
+                query=retrieval_plan["query"],
+                top_k=retrieval_plan["top_k"],
+                retrieval_mode=retrieval_plan["retrieval_mode"],
+                source_group_filters=retrieval_plan["source_group_filters"],
+                source_id_filters=retrieval_plan["source_id_filters"],
+                filter_logic=retrieval_plan["filter_logic"],
+                purpose="question_answer_grounding",
+                emit_result_to=self.agent_label,
+            )
         sufficiency = self.assess_evidence_sufficiency(
             retrieval_artifacts=retrieval_artifacts,
             required_source_groups=retrieval_plan["required_source_groups"],
         )
-        if not sufficiency["sufficient"]:
+        if workflow_variant == "full_agentic" and not sufficiency["sufficient"]:
             clarification = self.build_clarification_response(
                 run_id=run_id,
                 reason="insufficient_question_grounding",
@@ -2512,6 +2756,28 @@ class OrchestratorAgent(BaseAgent):
             )
             clarification["question_id"] = question_id
             clarification["question"] = question
+            qa_dir = self.tools.artifacts.run_path(run_id, "outputs", "qa")
+            qa_dir.mkdir(parents=True, exist_ok=True)
+            retrieval_path = qa_dir / f"{question_id}.retrieval_hits.json"
+            evidence_package_path = qa_dir / f"{question_id}.evidence_package.json"
+            clarification_path = qa_dir / f"{question_id}.clarification.json"
+            self.tools.artifacts.write_json(retrieval_path, retrieval_artifacts["retrieval_hits"])
+            self.tools.artifacts.write_json(evidence_package_path, retrieval_artifacts["evidence_package"])
+            self.tools.artifacts.write_json(clarification_path, clarification)
+            self.tools.retrieval.upsert_qa_index_entry(
+                qa_dir / "qa_index.jsonl",
+                {
+                    "question_id": question_id,
+                    "question": question,
+                    "retrieval_hits_path": str(retrieval_path),
+                    "evidence_package_path": str(evidence_package_path),
+                    "clarification_path": str(clarification_path),
+                    "answer_path": None,
+                    "workflow_variant": workflow_variant,
+                    "status": "abstained",
+                    "dry_run": dry_run,
+                },
+            )
             self.record_stage(
                 run_id,
                 stage_name="answer_question",
@@ -2523,6 +2789,7 @@ class OrchestratorAgent(BaseAgent):
                     "question": question,
                     "retrieval_query": retrieval_plan["query"],
                     "patient_profile_path": str(patient_profile_path) if patient_profile_path else None,
+                    "workflow_variant": workflow_variant,
                 },
                 outputs={
                     "clarification_reason": clarification["reason"],
@@ -2545,6 +2812,7 @@ class OrchestratorAgent(BaseAgent):
                 "question": question,
                 "retrieval_hit_count": len(retrieval_artifacts["retrieval_hits"]),
                 "retrieval_mode_used": retrieval_artifacts["mode_used"],
+                "workflow_variant": workflow_variant,
                 "planning_mode": retrieval_plan.get("planning_mode"),
                 "planning_reason": retrieval_plan.get("planning_reason"),
                 "participant_profile": {
@@ -2565,6 +2833,7 @@ class OrchestratorAgent(BaseAgent):
             retrieval_mode=retrieval_plan["retrieval_mode"],
             source_group_filters=retrieval_plan["source_group_filters"],
             source_id_filters=retrieval_plan["source_id_filters"],
+            workflow_variant=workflow_variant,
             dry_run=dry_run,
             emit_result_to=self.agent_label,
         )
@@ -2580,6 +2849,7 @@ class OrchestratorAgent(BaseAgent):
                 "question": question,
                 "patient_profile_path": str(patient_profile_path) if patient_profile_path else None,
                 "retrieval_query": retrieval_plan["query"],
+                "workflow_variant": workflow_variant,
                 "top_k": retrieval_plan["top_k"],
                 "retrieval_mode": retrieval_plan["retrieval_mode"],
                 "source_group_filters": retrieval_plan["source_group_filters"],
@@ -2591,7 +2861,7 @@ class OrchestratorAgent(BaseAgent):
             outputs={
                 "answer_output_path": answer_payload.get("output_path"),
                 "request_bundle_path": answer_payload.get("request_bundle_path"),
-                "orchestrator_to_rag_handoff_path": orchestrator_to_rag["path"],
+                "orchestrator_to_rag_handoff_path": orchestrator_to_rag_path,
                 "orchestrator_to_conversational_handoff_path": orchestrator_to_conversational["path"],
                 "conversational_result_handoff_path": answer_payload.get("agent_handoff_path"),
             },
@@ -2675,15 +2945,17 @@ class OrchestratorAgent(BaseAgent):
         source_group_filters: list[str] | None = None,
         source_id_filters: list[str] | None = None,
         filter_logic: str | None = None,
+        workflow_variant: str = "full_agentic",
         dry_run: bool = False,
     ) -> dict[str, Any]:
         started_at = utc_now_iso()
+        workflow_variant = self.normalize_workflow_variant(workflow_variant)
         route = self.classify_user_request(
             user_input=user_input,
             run_id=run_id,
             template_path=template_path,
             draft_path=draft_path,
-            use_llm=not dry_run,
+            use_llm=workflow_variant == "full_agentic" and not dry_run,
         )
 
         routing_handoff = self.emit_handoff(
@@ -2695,6 +2967,7 @@ class OrchestratorAgent(BaseAgent):
                 "intent": route["intent"],
                 "reason": route["reason"],
                 "planning_mode": route.get("planning_mode"),
+                "workflow_variant": workflow_variant,
             },
         )
 
@@ -2738,6 +3011,7 @@ class OrchestratorAgent(BaseAgent):
                 source_group_filters=source_group_filters,
                 source_id_filters=source_id_filters,
                 filter_logic=filter_logic,
+                workflow_variant=workflow_variant,
                 dry_run=dry_run,
             )
         elif route["intent"] == "formalize_consent":
@@ -2757,6 +3031,7 @@ class OrchestratorAgent(BaseAgent):
                 source_group_filters=source_group_filters,
                 source_id_filters=source_id_filters,
                 filter_logic=filter_logic,
+                workflow_variant=workflow_variant,
                 dry_run=dry_run,
             )
 
@@ -2765,6 +3040,7 @@ class OrchestratorAgent(BaseAgent):
                 "intent": route["intent"],
                 "reason": route["reason"],
                 "planning_mode": route.get("planning_mode"),
+                "workflow_variant": workflow_variant,
                 "routing_handoff_path": routing_handoff["path"],
             }
         self.record_stage(
@@ -2778,6 +3054,7 @@ class OrchestratorAgent(BaseAgent):
                 "intent": route["intent"],
                 "reason": route["reason"],
                 "planning_mode": route.get("planning_mode"),
+                "workflow_variant": workflow_variant,
                 "routing_handoff_path": routing_handoff["path"],
             },
             notes="The orchestrator classified the user input and selected the next specialized agent path.",

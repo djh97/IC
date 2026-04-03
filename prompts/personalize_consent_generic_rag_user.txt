@@ -1,0 +1,41 @@
+Participant profile:
+${participant_profile_json}
+
+Base consent template:
+${base_template_text}
+
+Generation objective:
+${generation_objective}
+
+Readability guidance:
+${readability_guidance}
+
+Retrieved grounding context:
+${combined_grounding_context}
+
+Instructions:
+- Write two outputs:
+  - a concise key-information summary
+  - a fuller participant-facing informed consent draft
+- Use the retrieved context as a single combined evidence pool.
+- Keep the fuller draft meaningfully fuller than the summary.
+- Use plain language aligned with the participant profile.
+- Preserve the meaning of the supplied study and consent information.
+- Do not invent unsupported study details.
+- Cover the core consent topics when the context supports them:
+  - voluntary choice
+  - what the participant will do
+  - risks
+  - possible benefits or uncertainty about direct benefit
+  - alternatives or other options
+  - asking questions or contacting the study team
+  - stopping later without penalty
+- If the retrieved context does not support a concrete study fact, say less rather than guessing.
+- Cite grounded statements inline with the available markers such as [1] or [2].
+- Return valid JSON with exactly these top-level fields:
+  - key_information_summary
+  - key_information_citation_markers_used
+  - personalized_consent_text
+  - citation_markers_used
+  - personalization_rationale
+  - grounding_limitations

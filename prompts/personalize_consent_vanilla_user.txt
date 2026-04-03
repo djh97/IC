@@ -1,0 +1,29 @@
+Participant profile:
+${participant_profile_json}
+
+Base consent template:
+${base_template_text}
+
+Generation objective:
+${generation_objective}
+
+Readability guidance:
+${readability_guidance}
+
+Instructions:
+- Write two outputs:
+  - a concise key-information summary
+  - a fuller participant-facing informed consent draft
+- Use only the participant profile and the base template.
+- Do not invent detailed study facts that are not present in the template.
+- If specific study details are unavailable, say that the study team will explain them before participation.
+- Use plain language aligned with the participant profile.
+- Cover the main consent topics in general terms when the template supports them.
+- Do not fabricate citation markers.
+- Return valid JSON with exactly these top-level fields:
+  - key_information_summary
+  - key_information_citation_markers_used
+  - personalized_consent_text
+  - citation_markers_used
+  - personalization_rationale
+  - grounding_limitations

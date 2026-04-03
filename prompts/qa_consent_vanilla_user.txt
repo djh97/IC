@@ -1,0 +1,20 @@
+Participant profile:
+${participant_profile_json}
+
+Participant question:
+${participant_question}
+
+Readability guidance:
+${readability_guidance}
+
+Instructions:
+- Answer the participant's question directly using only general informed-consent knowledge and the participant profile.
+- Do not invent detailed study facts that were not supplied.
+- If the question asks for a study-specific fact that is unavailable, say that you do not have enough specific study information.
+- Keep the answer to 2 to 3 short sentences.
+- Do not fabricate citation markers.
+- Return valid JSON with exactly these top-level fields:
+  - answer_text
+  - citation_markers_used
+  - uncertainty_noted
+  - grounding_limitations

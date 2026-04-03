@@ -1,6 +1,7 @@
 {
   "batch_id": "public_regulatory_batch_v1",
   "base_run_id": "REPLACE_WITH_PREPARED_RUN_ID",
+  "reporting_role": "baseline",
   "defaults": {
     "template_file": "data/raw/examples/base_consent_template.txt",
     "top_k": 5,
@@ -9,7 +10,8 @@
     "retrieval_mode": "hybrid",
     "retrieval_source_groups": [
       "regulatory_guidance"
-    ]
+    ],
+    "workflow_variant": "generic_rag"
   },
   "cases": [
     {

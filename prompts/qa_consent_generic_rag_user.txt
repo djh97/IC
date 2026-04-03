@@ -1,0 +1,23 @@
+Participant profile:
+${participant_profile_json}
+
+Participant question:
+${participant_question}
+
+Readability guidance:
+${readability_guidance}
+
+Retrieved grounding context:
+${combined_grounding_context}
+
+Instructions:
+- Answer the participant's question using the retrieved context as a single combined evidence pool.
+- Start with a direct answer.
+- Keep the answer to 2 to 3 short sentences unless more is truly needed.
+- If the context does not support the exact answer, say so plainly instead of guessing.
+- Cite grounded statements inline using the available markers such as [1] or [2].
+- Return valid JSON with exactly these top-level fields:
+  - answer_text
+  - citation_markers_used
+  - uncertainty_noted
+  - grounding_limitations

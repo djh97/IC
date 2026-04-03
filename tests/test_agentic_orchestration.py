@@ -18,11 +18,20 @@ class AgenticOrchestrationTests(unittest.TestCase):
 
         source_dir = self.temp_path / "sources"
         regulatory_dir = source_dir / "regulatory_guidance"
+        trial_dir = source_dir / "trial_materials"
         regulatory_dir.mkdir(parents=True, exist_ok=True)
+        trial_dir.mkdir(parents=True, exist_ok=True)
         (regulatory_dir / "regulatory_summary.txt").write_text(
             (
                 "Participation is voluntary. Participants may withdraw at any time without penalty. "
                 "Study staff should explain study purpose, procedures, risks, benefits, and alternatives."
+            ),
+            encoding="utf-8",
+        )
+        (trial_dir / "nct03877237.txt").write_text(
+            (
+                "This study tests dapagliflozin in adults with heart failure. "
+                "Participants attend study visits, complete assessments, and may receive study treatment or placebo."
             ),
             encoding="utf-8",
         )
@@ -88,6 +97,24 @@ class AgenticOrchestrationTests(unittest.TestCase):
         self.assertIn(("Orchestrator Agent", "Personalization Agent"), handoff_pairs)
         self.assertIn(("Personalization Agent", "Orchestrator Agent"), handoff_pairs)
         self.assertTrue(Path(payload["draft_content_plan_path"]).exists())
+
+    def test_vanilla_draft_dry_run_skips_rag_and_content_plan(self) -> None:
+        payload = self.pipeline.draft_personalized_consent(
+            run_id=self.run_id,
+            patient_profile_path=self.patient_profile_path,
+            template_path=self.template_path,
+            workflow_variant="vanilla_llm",
+            dry_run=True,
+        )
+
+        self.assertTrue(payload["dry_run"])
+        self.assertIsNone(payload["response"])
+        self.assertIsNone(payload["draft_content_plan_path"])
+
+        handoffs = self.load_handoffs()
+        handoff_pairs = {(item["from_agent"], item["to_agent"]) for item in handoffs}
+        self.assertNotIn(("Orchestrator Agent", "RAG Agent"), handoff_pairs)
+        self.assertIn(("Orchestrator Agent", "Personalization Agent"), handoff_pairs)
 
     def test_question_dry_run_uses_orchestrator_rag_and_conversational_agents(self) -> None:
         payload = self.pipeline.answer_consent_question(
@@ -166,6 +193,21 @@ class AgenticOrchestrationTests(unittest.TestCase):
         self.assertEqual(recovery_plan["source_group_filters"], ["trial_materials"])
         self.assertIn("study procedures", recovery_plan["query"])
         self.assertIn("possible benefits", recovery_plan["query"])
+
+    def test_personalization_grounding_requires_trial_materials_when_study_scope_is_requested(self) -> None:
+        plan = self.pipeline.orchestrator_agent.plan_personalization_grounding(
+            patient_profile=self.pipeline.load_patient_profile(self.patient_profile_path),
+            base_template_text=self.template_path.read_text(encoding="utf-8"),
+            generation_query=None,
+            top_k=None,
+            retrieval_mode=None,
+            source_group_filters=["regulatory_guidance", "trial_materials"],
+            source_id_filters=["nct03877237"],
+            filter_logic="union",
+        )
+
+        self.assertEqual(plan["required_source_groups"], ["regulatory_guidance", "trial_materials"])
+        self.assertIn("trial_materials", plan["preferred_source_groups"])
 
     def test_merge_retrieval_artifacts_deduplicates_and_rebuilds_citations(self) -> None:
         primary = {
@@ -251,6 +293,7 @@ class AgenticOrchestrationTests(unittest.TestCase):
             run_id=self.run_id,
             user_input="What drug will I take in this study?",
             patient_profile_path=self.patient_profile_path,
+            source_group_filters=["regulatory_guidance"],
             dry_run=True,
         )
 

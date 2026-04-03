@@ -1,7 +1,7 @@
 {
-  "batch_id": "hf_interventional_multi_study_v1",
+  "batch_id": "hf_interventional_multi_study_generic_rag_v1",
   "base_run_id": "REPLACE_WITH_PREPARED_RUN_ID",
-  "reporting_role": "scientific_evaluation",
+  "reporting_role": "baseline",
   "defaults": {
     "template_file": "data/raw/examples/base_consent_template.txt",
     "top_k": 6,
@@ -13,7 +13,7 @@
       "regulatory_guidance",
       "trial_materials"
     ],
-    "workflow_variant": "full_agentic"
+    "workflow_variant": "generic_rag"
   },
   "case_matrix": {
     "study_cohort_file": "configs/study_cohorts/hf_interventional_primary_v1.json",
@@ -26,6 +26,6 @@
       "configs/question_sets/study_participation_basics.json",
       "configs/question_sets/study_specific_basics.json"
     ],
-    "notes": "Matrix-expanded multi-study benchmark over the curated interventional heart-failure cohort."
+    "notes": "Generic-RAG baseline over the curated interventional heart-failure cohort without role-separated planning or draft revision."
   }
 }

@@ -30,6 +30,7 @@ Instructions:
 - A rights question does not need study-specific context unless it also asks for a concrete study fact.
 - If both context lanes help, use one short direct sentence from the main lane and one short supporting sentence from the other lane.
 - If the needed context lane is missing, say you do not have enough evidence instead of guessing.
+- If only part of the answer is supported, answer that supported part and explicitly note what remains uncertain.
 - Cite grounded statements inline using only the provided markers such as [1] or [2].
 - If a sentence contains a study fact, include a citation marker in that sentence.
 - If a sentence contains a participant-rights or policy fact, include a citation marker in that sentence when a marker is available.

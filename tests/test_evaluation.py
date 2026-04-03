@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
 from informed_consent.evaluation import (
     build_draft_revision_audit,
     compare_draft_revision_candidates,
+    evaluate_run_outputs,
     sentence_citation_metrics,
     summarize_personalized_draft,
 )
@@ -202,6 +206,93 @@ class DraftRevisionAuditTests(unittest.TestCase):
 
         self.assertFalse(comparison["accept_revision"])
         self.assertIn("revision_lost_planned_required_elements", comparison["reasons"])
+
+
+class EvaluationOutputTests(unittest.TestCase):
+    def test_evaluate_run_outputs_tracks_expected_study_specific_grounding(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            run_dir = Path(temp_dir)
+            (run_dir / "inputs").mkdir(parents=True, exist_ok=True)
+            (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
+            (run_dir / "inputs" / "patient_profile.json").write_text(
+                json.dumps(
+                    {
+                        "participant_id": "P-1",
+                        "health_literacy": "medium",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (run_dir / "outputs" / "personalized_consent_draft.json").write_text(
+                json.dumps(
+                    {
+                        "key_information_summary": "You can choose to join [1].",
+                        "key_information_citation_markers_used": ["[1]"],
+                        "personalized_consent_text": "You can choose to join [1]. You may ask questions [1].",
+                        "citation_markers_used": ["[1]"],
+                        "personalization_rationale": [],
+                        "grounding_limitations": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (run_dir / "outputs" / "personalization_request_bundle.json").write_text(
+                json.dumps(
+                    {
+                        "workflow_variant": "full_agentic",
+                        "source_group_filters": ["regulatory_guidance", "trial_materials"],
+                        "source_id_filters": ["nct03877237"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (run_dir / "outputs" / "personalization_evidence_package.json").write_text(
+                json.dumps(
+                    {
+                        "role_counts": {
+                            "study_specific": 0,
+                            "regulatory": 2,
+                            "other": 0,
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            summary = evaluate_run_outputs("run-1", run_dir)["summary"]
+
+        self.assertTrue(summary["draft"]["expected_study_specific_grounding"])
+        self.assertFalse(summary["draft"]["study_specific_grounding_met"])
+        self.assertTrue(summary["draft"]["study_specific_grounding_gap"])
+
+    def test_evaluate_run_outputs_counts_qa_abstentions_from_index(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            run_dir = Path(temp_dir)
+            qa_dir = run_dir / "outputs" / "qa"
+            qa_dir.mkdir(parents=True, exist_ok=True)
+            (run_dir / "inputs").mkdir(parents=True, exist_ok=True)
+            (run_dir / "inputs" / "patient_profile.json").write_text(
+                json.dumps({"participant_id": "P-1", "health_literacy": "low"}),
+                encoding="utf-8",
+            )
+            (qa_dir / "qa_index.jsonl").write_text(
+                json.dumps(
+                    {
+                        "question_id": "q1",
+                        "question": "What would I have to do in this study?",
+                        "answer_path": None,
+                    }
+                ) + "\n",
+                encoding="utf-8",
+            )
+
+            summary = evaluate_run_outputs("run-qa", run_dir)["summary"]
+
+        self.assertTrue(summary["qa_answers"]["artifact_present"])
+        self.assertEqual(summary["qa_answers"]["question_count"], 1)
+        self.assertEqual(summary["qa_answers"]["answered_question_count"], 0)
+        self.assertEqual(summary["qa_answers"]["abstained_question_count"], 1)
+        self.assertEqual(summary["qa_answers"]["abstention_rate"], 1.0)
 
 
 if __name__ == "__main__":

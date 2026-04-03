@@ -552,6 +552,42 @@ def evaluate_run_outputs(run_id: str, run_dir: Path) -> dict[str, Any]:
             available_markers=available_markers,
             health_literacy=health_literacy,
         )
+        request_bundle_path = outputs_dir / "personalization_request_bundle.json"
+        expected_study_specific_grounding = False
+        has_study_specific_evidence = False
+        if request_bundle_path.exists():
+            request_bundle = load_json(request_bundle_path)
+            source_group_filters = request_bundle.get("source_group_filters", [])
+            if not isinstance(source_group_filters, list):
+                source_group_filters = []
+            source_group_filters = [str(item) for item in source_group_filters]
+            source_id_filters = request_bundle.get("source_id_filters", [])
+            if not isinstance(source_id_filters, list):
+                source_id_filters = []
+            source_id_filters = [str(item) for item in source_id_filters]
+            draft_summary["workflow_variant"] = str(request_bundle.get("workflow_variant", "full_agentic")).strip() or "full_agentic"
+            expected_study_specific_grounding = bool(source_id_filters) or ("trial_materials" in source_group_filters)
+            draft_summary["expected_study_specific_grounding"] = expected_study_specific_grounding
+
+        evidence_package_path = outputs_dir / "personalization_evidence_package.json"
+        if evidence_package_path.exists():
+            evidence_package = load_json(evidence_package_path)
+            role_counts = evidence_package.get("role_counts", {})
+            if not isinstance(role_counts, dict):
+                role_counts = {}
+            study_specific_hit_count = int(role_counts.get("study_specific", 0) or 0)
+            regulatory_hit_count = int(role_counts.get("regulatory", 0) or 0)
+            other_hit_count = int(role_counts.get("other", 0) or 0)
+            total_role_hits = max(study_specific_hit_count + regulatory_hit_count + other_hit_count, 1)
+            draft_summary["study_specific_hit_count"] = study_specific_hit_count
+            draft_summary["regulatory_hit_count"] = regulatory_hit_count
+            draft_summary["other_hit_count"] = other_hit_count
+            has_study_specific_evidence = study_specific_hit_count > 0
+            draft_summary["has_study_specific_evidence"] = has_study_specific_evidence
+            draft_summary["study_specific_hit_ratio"] = round(study_specific_hit_count / total_role_hits, 4)
+        draft_summary["expected_study_specific_grounding"] = expected_study_specific_grounding
+        draft_summary["study_specific_grounding_met"] = (not expected_study_specific_grounding) or has_study_specific_evidence
+        draft_summary["study_specific_grounding_gap"] = expected_study_specific_grounding and not has_study_specific_evidence
         summary["draft"] = draft_summary
         evaluation_records.extend(
             build_evaluation_records(
@@ -631,12 +667,15 @@ def evaluate_run_outputs(run_id: str, run_dir: Path) -> dict[str, Any]:
     qa_index_rows = deduplicate_qa_index_rows(load_jsonl(qa_index_path))
     qa_answer_summaries: list[dict[str, Any]] = []
     if qa_index_rows:
+        abstained_question_count = 0
         for row in qa_index_rows:
             answer_path_raw = row.get("answer_path")
             if not answer_path_raw:
+                abstained_question_count += 1
                 continue
             answer_path = Path(answer_path_raw)
             if not answer_path.exists():
+                abstained_question_count += 1
                 continue
 
             answer = load_json(answer_path)
@@ -701,8 +740,15 @@ def evaluate_run_outputs(run_id: str, run_dir: Path) -> dict[str, Any]:
         avg_sentence_citation_coverage = sum(item["sentence_citation_coverage_ratio"] for item in qa_answer_summaries) / len(qa_answer_summaries)
         qa_aggregate = {
             "artifact_present": True,
-            "question_count": len(qa_answer_summaries),
+            "question_count": len(qa_index_rows),
+            "answered_question_count": len(qa_answer_summaries),
+            "abstained_question_count": abstained_question_count,
+            "abstention_rate": round(abstained_question_count / max(len(qa_index_rows), 1), 4),
             "answers_with_uncertainty_count": sum(1 for item in qa_answer_summaries if item["uncertainty_noted"]),
+            "uncertainty_rate": round(
+                sum(1 for item in qa_answer_summaries if item["uncertainty_noted"]) / max(len(qa_answer_summaries), 1),
+                4,
+            ) if qa_answer_summaries else 0.0,
             "answers_with_schema_repair_count": sum(1 for item in qa_answer_summaries if item["schema_repair_applied"]),
             "answers_meeting_grade_target_count": sum(1 for item in qa_answer_summaries if item["qa_grade_target_met"]),
             "average_flesch_reading_ease": round(avg_flesch, 4),
@@ -720,7 +766,11 @@ def evaluate_run_outputs(run_id: str, run_dir: Path) -> dict[str, Any]:
                 metrics={
                     "artifact_present": True,
                     "question_count": qa_aggregate["question_count"],
+                    "answered_question_count": qa_aggregate["answered_question_count"],
+                    "abstained_question_count": qa_aggregate["abstained_question_count"],
+                    "abstention_rate": qa_aggregate["abstention_rate"],
                     "answers_with_uncertainty_count": qa_aggregate["answers_with_uncertainty_count"],
+                    "uncertainty_rate": qa_aggregate["uncertainty_rate"],
                     "answers_with_schema_repair_count": qa_aggregate["answers_with_schema_repair_count"],
                     "answers_meeting_grade_target_count": qa_aggregate["answers_meeting_grade_target_count"],
                     "average_flesch_reading_ease": qa_aggregate["average_flesch_reading_ease"],
@@ -731,7 +781,14 @@ def evaluate_run_outputs(run_id: str, run_dir: Path) -> dict[str, Any]:
             )
         )
     else:
-        summary["qa_answers"] = {"artifact_present": False, "question_count": 0}
+        summary["qa_answers"] = {
+            "artifact_present": bool(qa_index_rows),
+            "question_count": len(qa_index_rows),
+            "answered_question_count": 0,
+            "abstained_question_count": len(qa_index_rows),
+            "abstention_rate": round(len(qa_index_rows) / max(len(qa_index_rows), 1), 4) if qa_index_rows else 0.0,
+            "uncertainty_rate": 0.0,
+        }
 
     qualitative_bundle = {
         "run_id": run_id,
