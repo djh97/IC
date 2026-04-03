@@ -1,0 +1,32 @@
+{
+  "batch_id": "example_personalized_consent_cases",
+  "base_run_id": "REPLACE_WITH_PREPARED_RUN_ID",
+  "cases": [
+    {
+      "case_id": "us_low_literacy",
+      "patient_profile_file": "configs/patient_profiles/example_us_low_literacy.json",
+      "template_file": "data/raw/examples/base_consent_template.txt",
+      "questions": [
+        "Can I leave the study later without any penalty?",
+        "What will I have to do in the study?"
+      ],
+      "top_k": 5,
+      "generate_draft": true,
+      "formalize": true,
+      "notes": "Example low-literacy participant case."
+    },
+    {
+      "case_id": "us_medium_literacy",
+      "patient_profile_file": "configs/patient_profiles/example_us_medium_literacy.json",
+      "template_file": "data/raw/examples/base_consent_template.txt",
+      "questions": [
+        "What are the possible risks and benefits?",
+        "What other options do I have besides joining?"
+      ],
+      "top_k": 5,
+      "generate_draft": true,
+      "formalize": true,
+      "notes": "Example medium-literacy participant case."
+    }
+  ]
+}

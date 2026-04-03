@@ -1,0 +1,20 @@
+Participant profile:
+${participant_profile_json}
+
+Key-information summary:
+${key_information_summary}
+
+Personalized consent draft:
+${personalized_consent_text}
+
+Known citation markers in the draft:
+${citation_markers}
+
+Instructions:
+- Convert the draft into a structured machine-readable record.
+- Use both the key-information summary and fuller draft when helpful.
+- Extract only information that is grounded in the draft.
+- If a field is not supported, use an empty list or null as appropriate.
+- Keep field names stable.
+- Return exactly the top-level fields required by the response schema and do not wrap them in any outer object.
+- Fill the fields directly for: purposes, data_types, valid_until, withdrawal_policy, study_purpose_summary, study_procedures_summary, risks_summary, benefits_summary, alternatives_summary, question_rights_summary, voluntary_participation_statement, withdrawal_rights_summary, participant_rights, consent_summary, cited_markers, and metadata.

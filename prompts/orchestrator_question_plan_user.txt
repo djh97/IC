@@ -1,0 +1,15 @@
+Participant question:
+${question}
+
+Requested source-group filters:
+${source_group_filters_json}
+
+Requested source-id filters:
+${source_id_filters_json}
+
+Instructions:
+- Choose the most appropriate question_profile.
+- Specify which source groups are required for a safe grounded answer.
+- Specify the preferred source groups for retrieval ranking.
+- Provide a retrieval_query that is more retrieval-friendly when useful.
+- Keep the reason concise.

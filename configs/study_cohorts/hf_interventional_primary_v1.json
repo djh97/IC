@@ -1,0 +1,46 @@
+{
+  "cohort_id": "hf_interventional_primary_v1",
+  "notes": "Primary curated multi-study cohort for heart-failure and HFrEF interventional consent benchmarking. Excludes the observational HFrEF care study and the sleep-apnea remodeling study to keep the benchmark closer to the main consent-generation use case.",
+  "studies": [
+    {
+      "source_id": "nct03877237",
+      "notes": "Phase III HFrEF dapagliflozin trial used as the main end-to-end reference case."
+    },
+    {
+      "source_id": "nct04210375",
+      "notes": "Completed HFrEF interventional study with a matching posted consent form."
+    },
+    {
+      "source_id": "nct04793880",
+      "notes": "Completed heart-failure interventional study focused on cost and shared decision-making."
+    },
+    {
+      "source_id": "nct05757193",
+      "notes": "Completed HFrEF interventional pharmacokinetic study with a matching posted consent form."
+    },
+    {
+      "source_id": "nct07086131",
+      "notes": "Recruiting heart-failure interventional study that broadens the benchmark beyond completed trials."
+    },
+    {
+      "source_id": "nct01454128",
+      "notes": "Completed heart-failure interventional physiology study."
+    },
+    {
+      "source_id": "nct03701880",
+      "notes": "Heart-failure interventional study involving early ivabradine use."
+    },
+    {
+      "source_id": "nct03926754",
+      "notes": "Completed heart-failure interventional drug-treatment study."
+    },
+    {
+      "source_id": "nct06611423",
+      "notes": "Terminated HFrEF interventional study with renal-impairment context."
+    },
+    {
+      "source_id": "nct01951625",
+      "notes": "Completed Phase II HFrEF dose-regimen trial with posted results."
+    }
+  ]
+}

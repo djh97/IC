@@ -1,0 +1,25 @@
+Participant profile:
+${participant_profile_json}
+
+Base consent template:
+${base_template_text}
+
+Generation query:
+${generation_query}
+
+Study-specific grounding context:
+${study_specific_context}
+
+Regulatory grounding context:
+${regulatory_context}
+
+Other grounding context:
+${other_grounding_context}
+
+Instructions:
+- Build a consent-draft content plan for the Personalization Agent.
+- Keep the plan grounded in the supplied context and template.
+- If the evidence is weak for an element, mark it as partially_supported or unsupported instead of inventing facts.
+- Use recommended citation markers from the supplied evidence when available.
+- Make the instructions practical and short.
+- Return valid JSON only.

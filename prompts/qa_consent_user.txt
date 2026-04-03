@@ -1,0 +1,40 @@
+Participant profile:
+${participant_profile_json}
+
+Participant question:
+${participant_question}
+
+Readability guidance:
+${readability_guidance}
+
+Study-specific grounding context:
+${study_specific_context}
+
+Regulatory grounding context:
+${regulatory_context}
+
+Other grounding context:
+${other_grounding_context}
+
+Instructions:
+- Answer the participant's question using only the grounded context.
+- Use clear, patient-facing, non-coercive language.
+- Follow the readability guidance closely.
+- If the context is insufficient, say so plainly.
+- Start with a direct answer.
+- Keep the answer to 2 to 3 short sentences unless the context truly requires more.
+- Use one main fact per sentence.
+- Avoid long clauses such as "which may include" when a simpler sentence will do.
+- If the question is about this study's procedures, interventions, visits, or study purpose, prefer study-specific context.
+- If the question is about rights, withdrawal, privacy, or alternatives, prefer regulatory context.
+- A rights question does not need study-specific context unless it also asks for a concrete study fact.
+- If both context lanes help, use one short direct sentence from the main lane and one short supporting sentence from the other lane.
+- If the needed context lane is missing, say you do not have enough evidence instead of guessing.
+- Cite grounded statements inline using only the provided markers such as [1] or [2].
+- If a sentence contains a study fact, include a citation marker in that sentence.
+- If a sentence contains a participant-rights or policy fact, include a citation marker in that sentence when a marker is available.
+- Return valid JSON with exactly these top-level fields:
+  - answer_text
+  - citation_markers_used
+  - uncertainty_noted
+  - grounding_limitations

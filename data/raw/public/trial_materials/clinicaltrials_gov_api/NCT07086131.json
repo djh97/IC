@@ -1,0 +1,208 @@
+{
+  "protocolSection": {
+    "identificationModule": {
+      "nctId": "NCT07086131",
+      "orgStudyIdInfo": {
+        "id": "25-005871"
+      },
+      "secondaryIdInfos": [
+        {
+          "id": "1R01HL176491-01",
+          "type": "NIH",
+          "link": "https://reporter.nih.gov/quickSearch/1R01HL176491-01"
+        }
+      ],
+      "organization": {
+        "fullName": "Mayo Clinic",
+        "class": "OTHER"
+      },
+      "briefTitle": "A Study Investigating the Impact of IMT With CR On Exercise Responses In HF",
+      "officialTitle": "Impact Of Adding Inspiratory Muscle Training To Cardiac Rehabilitation On Exercise Responses In Heart Failure"
+    },
+    "statusModule": {
+      "statusVerifiedDate": "2025-09",
+      "overallStatus": "RECRUITING",
+      "expandedAccessInfo": {
+        "hasExpandedAccess": false
+      },
+      "startDateStruct": {
+        "date": "2025-09-04",
+        "type": "ACTUAL"
+      },
+      "primaryCompletionDateStruct": {
+        "date": "2029-08",
+        "type": "ESTIMATED"
+      },
+      "completionDateStruct": {
+        "date": "2029-08",
+        "type": "ESTIMATED"
+      },
+      "studyFirstSubmitDate": "2025-07-18",
+      "studyFirstSubmitQcDate": "2025-07-18",
+      "studyFirstPostDateStruct": {
+        "date": "2025-07-25",
+        "type": "ACTUAL"
+      },
+      "lastUpdateSubmitDate": "2025-09-22",
+      "lastUpdatePostDateStruct": {
+        "date": "2025-09-25",
+        "type": "ACTUAL"
+      }
+    },
+    "sponsorCollaboratorsModule": {
+      "responsibleParty": {
+        "type": "PRINCIPAL_INVESTIGATOR",
+        "investigatorFullName": "Joshua R. Smith",
+        "investigatorTitle": "Principal Investigator",
+        "investigatorAffiliation": "Mayo Clinic"
+      },
+      "leadSponsor": {
+        "name": "Mayo Clinic",
+        "class": "OTHER"
+      },
+      "collaborators": [
+        {
+          "name": "National Heart, Lung, and Blood Institute (NHLBI)",
+          "class": "NIH"
+        }
+      ]
+    },
+    "oversightModule": {
+      "oversightHasDmc": false,
+      "isFdaRegulatedDrug": false,
+      "isFdaRegulatedDevice": true,
+      "isUnapprovedDevice": true
+    },
+    "descriptionModule": {
+      "briefSummary": "The purpose of this study is to compare the impact of inspiratory muscle training (IMT) combined with cardiac rehabilitation (CR) on cardiovascular function in patients with heart failure."
+    },
+    "conditionsModule": {
+      "conditions": [
+        "Heart Failure With Reduced Ejection Fraction"
+      ]
+    },
+    "designModule": {
+      "studyType": "INTERVENTIONAL",
+      "phases": [
+        "NA"
+      ],
+      "designInfo": {
+        "allocation": "RANDOMIZED",
+        "interventionModel": "PARALLEL",
+        "primaryPurpose": "OTHER",
+        "maskingInfo": {
+          "masking": "DOUBLE",
+          "whoMasked": [
+            "PARTICIPANT",
+            "OUTCOMES_ASSESSOR"
+          ]
+        }
+      },
+      "enrollmentInfo": {
+        "count": 70,
+        "type": "ESTIMATED"
+      }
+    },
+    "armsInterventionsModule": {
+      "armGroups": [
+        {
+          "label": "Inspiratory muscle training (IMT)",
+          "type": "EXPERIMENTAL",
+          "description": "IMT performed at 40% maximal inspiratory pressure (MIP) for 30 minutes 3 days a week for 12 weeks.",
+          "interventionNames": [
+            "Device: Powerbreathe"
+          ]
+        },
+        {
+          "label": "SHAM",
+          "type": "SHAM_COMPARATOR",
+          "description": "IMT performed at 5% maximal inspiratory pressure (MIP) for 30 minutes 3 days a week for 12 weeks.",
+          "interventionNames": [
+            "Device: Powerbreathe"
+          ]
+        }
+      ],
+      "interventions": [
+        {
+          "type": "DEVICE",
+          "name": "Powerbreathe",
+          "description": "The breathing training will consist of using the PowerBreathe for 12 weeks. The PowerBreathe is an inspiratory pressure threshold trainer. The valve blocks the airflow until the threshold pressure is achieved by breathing in forcefully into the device.",
+          "armGroupLabels": [
+            "Inspiratory muscle training (IMT)",
+            "SHAM"
+          ]
+        }
+      ]
+    },
+    "outcomesModule": {
+      "primaryOutcomes": [
+        {
+          "measure": "Change in locomotor muscle blood flow during exercise",
+          "description": "Locomotor muscle blood flows will be measured via Doppler-ultrasound. This will be measured in mL/min.",
+          "timeFrame": "Baseline, 12 weeks"
+        },
+        {
+          "measure": "Change in respiratory muscle cost of breathing (VO2)",
+          "description": "Respiratory muscle cost of breathing is the oxygen uptake (VO2) to the respiratory muscles. Respiratory muscle VO2 is expressed as milliliters of oxygen per kilogram of body mass per minute.",
+          "timeFrame": "Baseline, 12 weeks"
+        }
+      ]
+    },
+    "eligibilityModule": {
+      "eligibilityCriteria": "Inclusion Criteria\n\nHFrEF Patients: (\u226518 yrs) receiving guideline directed pharmacologic medical therapy for \\>6 weeks (those with contraindications to medical therapy will meet inclusion criteria), NYHA symptoms I-III, no hospitalizations in the \\>3 months, have a body mass index \u226445 kg/m2, currently be non-smokers with \\<30 pack year history and be able to exercise (i.e. without significant orthopedic limitations or musculoskeletal disorders limiting their ability to exercise).\n\nExclusion Criteria\n\n1. sustained ventricular tachycardia and/or ventricular fibrillation within 21 days of visit 1;\n2. second or third degree heart block;\n3. body mass index \\>45 kg/m2;\n4. current smokers and/or smoking history \\>30 pack years;\n5. pregnant women (testing will be done by research team if requested);\n6. glomerular filtration rate of \\<30 mL/min/1.73m2 (initial screen via clinical record within the past 6 months and this will be assessed on Visit 1);\n7. individuals who are not able to engage in exercise;\n8. symptomatic peripheral artery disease;\n9. asthmatic patients with a low symptom perception and suffer frequency, severe exacerbations or with an abnormally low perception of dyspnea;\n10. ruptured eardrum or any other condition of the ear;\n11. history of spontaneous pneumothorax or osteoporosis with a history of rib fractures;\n12. history of lung disease.\n\nFor individuals agreeing to undergo dual energy x-ray absorptiometry (DEXA) scanning for measurement of body composition as part of their study visit, additional exclusion criteria apply: recently administered gastrointestinal contrast or radionuclides; severe degenerative changes or fracture deformity in measurement areas; or inability to attain correct position and/or remain motionless for the measurement period.",
+      "healthyVolunteers": false,
+      "sex": "ALL",
+      "minimumAge": "18 Years",
+      "stdAges": [
+        "ADULT",
+        "OLDER_ADULT"
+      ]
+    },
+    "contactsLocationsModule": {
+      "centralContacts": [
+        {
+          "name": "Eric Bruhn, M.A",
+          "role": "CONTACT",
+          "phone": "507-266-2690",
+          "email": "bruhn.eric@mayo.edu"
+        }
+      ],
+      "overallOfficials": [
+        {
+          "name": "Joshua Smith, Ph.D.",
+          "affiliation": "Mayo Clinic",
+          "role": "PRINCIPAL_INVESTIGATOR"
+        }
+      ],
+      "locations": [
+        {
+          "facility": "Mayo Clinic in Rochester",
+          "status": "RECRUITING",
+          "city": "Rochester",
+          "state": "Minnesota",
+          "zip": "55905",
+          "country": "United States",
+          "contacts": [
+            {
+              "name": "Joshua R Smith",
+              "role": "PRINCIPAL_INVESTIGATOR"
+            }
+          ],
+          "geoPoint": {
+            "lat": 44.02163,
+            "lon": -92.4699
+          }
+        }
+      ]
+    },
+    "ipdSharingStatementModule": {
+      "ipdSharing": "NO"
+    }
+  },
+  "derivedSection": {
+    "miscInfoModule": {
+      "versionHolder": "2026-04-02"
+    }
+  },
+  "hasResults": false
+}

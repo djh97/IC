@@ -1,0 +1,66 @@
+Participant profile:
+${participant_profile_json}
+
+Base consent template:
+${base_template_text}
+
+Generation objective:
+${generation_objective}
+
+Readability guidance:
+${readability_guidance}
+
+Draft content plan:
+${draft_content_plan_json}
+
+Study-specific grounding context:
+${study_specific_context}
+
+Regulatory grounding context:
+${regulatory_context}
+
+Other grounding context:
+${other_grounding_context}
+
+Instructions:
+- Write two outputs:
+  - a concise key-information summary
+  - a fuller participant-facing personalized informed consent draft
+- Make the fuller draft meaningfully fuller than the summary.
+- Use plain language aligned with the participant profile.
+- Follow the readability guidance closely.
+- Follow the draft content plan when deciding which consent topics to cover, which evidence lane to rely on, and which markers to use.
+- If the draft content plan marks study procedures, benefits, or alternatives as supported or partially supported, include one short grounded sentence for each of those topics in the fuller draft.
+- For low-literacy participants, prefer simple words like "join", "leave", "study team", and "other options" over more formal alternatives when the meaning stays faithful.
+- Keep the fuller draft compact: usually one short grounded sentence per consent topic, with minimal repetition.
+- Preserve the meaning of the supplied study and consent information.
+- Do not invent facts that are not supported by the template or grounded context.
+- Use study-specific context for study details such as what the participant will do, what drug or intervention is involved, and study-specific risks or visits.
+- Use regulatory context for participant-rights language such as voluntary choice, withdrawal, alternatives, and questions/contact rights.
+- If one context lane is missing, say less rather than inventing missing details.
+- If both study-specific and regulatory context are available, the key-information summary should include at least:
+  - one short cited sentence about what this study is or what the participant would do
+  - one short cited sentence about participant choice or withdrawal rights
+- In the fuller draft, keep study facts and participant-rights statements as separate short cited sentences when needed.
+- In the fuller draft, explicitly include short statements about:
+  - voluntary choice
+  - what the participant will do
+  - possible risks
+  - possible benefits, or say clearly if direct benefit is not guaranteed
+  - alternatives or other options
+  - asking questions or contacting the study team
+  - stopping later without penalty
+- Do not omit one of those topics just to make the draft shorter.
+- When using grounded statements, cite them inline with the available markers such as [1] or [2].
+- Do not keep citation markers only in the JSON list fields; include them directly in the summary text and the fuller consent text.
+- When a sentence states a concrete study or consent fact, end that sentence with an inline citation marker if a source is available.
+- Do not compress several grounded facts into one uncited generic sentence.
+- Do not repeat the same withdrawal, choice, or study-purpose point in multiple paragraphs unless the draft would otherwise miss a required topic.
+- Use only the citation markers provided in the grounding context.
+- Return valid JSON with exactly these top-level fields:
+  - key_information_summary
+  - key_information_citation_markers_used
+  - personalized_consent_text
+  - citation_markers_used
+  - personalization_rationale
+  - grounding_limitations

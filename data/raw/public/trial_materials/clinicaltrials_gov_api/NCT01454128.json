@@ -1,0 +1,287 @@
+{
+  "protocolSection": {
+    "identificationModule": {
+      "nctId": "NCT01454128",
+      "orgStudyIdInfo": {
+        "id": "99-2546B"
+      },
+      "organization": {
+        "fullName": "Chang Gung Memorial Hospital",
+        "class": "OTHER"
+      },
+      "briefTitle": "The Role of Exercise-Periodic-Breathing (EPB) in Impaired Ventilation Regulation Dysfunction in Heart Failure Patients",
+      "officialTitle": "The Role of Exercise-Periodic-Breathing in Impaired Ventilation Regulation Dysfunction in Patients With Heart Failure"
+    },
+    "statusModule": {
+      "statusVerifiedDate": "2019-05",
+      "overallStatus": "COMPLETED",
+      "expandedAccessInfo": {
+        "hasExpandedAccess": false
+      },
+      "startDateStruct": {
+        "date": "2011-04"
+      },
+      "primaryCompletionDateStruct": {
+        "date": "2013-03",
+        "type": "ACTUAL"
+      },
+      "completionDateStruct": {
+        "date": "2013-03",
+        "type": "ACTUAL"
+      },
+      "studyFirstSubmitDate": "2011-10-14",
+      "studyFirstSubmitQcDate": "2011-10-17",
+      "studyFirstPostDateStruct": {
+        "date": "2011-10-18",
+        "type": "ESTIMATED"
+      },
+      "lastUpdateSubmitDate": "2019-05-17",
+      "lastUpdatePostDateStruct": {
+        "date": "2019-05-21",
+        "type": "ACTUAL"
+      }
+    },
+    "sponsorCollaboratorsModule": {
+      "responsibleParty": {
+        "type": "SPONSOR"
+      },
+      "leadSponsor": {
+        "name": "Chang Gung Memorial Hospital",
+        "class": "OTHER"
+      }
+    },
+    "oversightModule": {
+      "oversightHasDmc": true
+    },
+    "descriptionModule": {
+      "briefSummary": "Heart failure (HF) is a complex syndrome characterized by myocardial dysfunction and an impaired regulatory function of multiple organ systems which were resulted from impaired cardiac output and consequently impaired perfusion of target organ. In cardiopulmonary exercise test (CPET), the investigators found there is periodic oscillation in minute ventilation of some patient. With periodic breathing (PB), clear oscillations in oxygen uptake, carbon dioxide output, tidal volume and left ventricle ejection fraction (LVEF) were also noted. Exertional hyper-ventilation that is caused by HF may further induce vasoconstriction during exercise and lead to further dysfunction of end-organ and muscle. Reduced end-organ perfusion/oxygenation may critically limit exercise performance. Hypoxic change during nadir phase of PB may deteriorate the exercise limitation. Physical training can have beneficial effects which can effectively counteract the progression of deleterious compensatory mechanisms of HF. Whether exercise yields the same beneficial effect on ventilation oscillation and inefficacy is not clear.\n\nThe investigators will observe the real-time cardiac and hemodynamic change respond to exercise with periodic breathing change. The investigators expect that these results obtained from this study can aid in determining appropriate exercise intervention to improve aerobic fitness as well as simultaneously improve hemodynamic control in patients with HF. A quasi-experimental design will be used in this investigation. 60 HF patients will be recruited from Chang Gung Medical Foundation, Keelung Branch after they have provided informed consent. These subjects will be divided into PB (n=30) and non-PB groups (n=30) by their expression of CPET. Patients from each groups received the same therapy and trace course for 2years including CV clinics, CPET and polysomnography. The investigators will measure subjects' physical fitness, oxygen transport and utilization of exercising skeletal muscles, cardiovascular functions and hemodynamics, blood cell parameters, RBC deformity and aggregation, plasma biomarkers of myocardial damage, oxygen stress and quality of life at pre-training stage and following the 6th , 12th, 18th, 24th months of the tracing program. Experimental results were analyzed by descriptive statistics, independent t-test, and repeated measure ANOVA. The investigators study the above parameter to realize the physiological response to exercise of these patients and discover the appropriate exercise intensity for prescription for EPB.",
+      "detailedDescription": "Patients with heart failure display dyspnea on exertion, lower PCO2 and higher ventilatory response to exercise (V E -V CO 2slope), which demonstrated dysregulation of breathing in this disease category. Some of these patients develop further ventilation dysregulation pattern with ventilatory oscillation composed with exercise periodic breathing (EPB) and sleep apnea. Previous studies revealed the ventilatory oscillation was associated with cyclic changes in arterial oxygen (PO2) and carbon dioxide (PCO2) tensions, and also associated with severely impaired exercise tolerance, a steep V E -V CO 2slope, and low peak O 2 consumption, both correlated with the worse severity of heart failure and adverse prognosis. The origin of ventilatory oscillation might involved instability of the ventilator control system, which composed with prolonged circulatory delay, abnormal peripheral ergore\ufb02ex activation and peripheral chemo- and baro-sensitivity, even through abnormal autonomic re\ufb02exes to an altered central command. However, the most studies investigated these responses via sleep apnea under resting status especially those about brain. The real-time change response to exercise was limited to ventilatory parameters such as oxygen consumption, carbon dioxide production. Whether the exercise periodic breathing response to exercise which lead to abnormal cerebral hemodynamic responses to exercise in HF remain unclear.\n\nImpaired cerebral blood flow was demonstrated during apnetic episode and related to neuropsychological deficits in sleep apnea patient. To be controlled by the same key feedback mechanism, impaired cerebral blood flow during exercise in EPB patients could be speculated. Moreover, Cerebral hypo-perfusion responses to exercise may contribute to the impairment of functional capacity in patients with HF. Accordingly, we hypothesize that the abnormal cerebral hemodynamics by exercise periodic breathing during exercise is associated with the decline of functional capacity in patients with HF. Besides, Physical training can have beneficial effects which can effectively counteract the progression of deleterious compensatory mechanisms of HF. Whether exercise yields the same beneficial effect on ventilation oscillation and inefficacy is not clear.\n\nWe will observe the real-time cardiac and hemodynamic change respond to exercise with periodic breathing change. We expect that these results obtained from this study can aid in determining appropriate exercise intervention to improve aerobic fitness as well as simultaneously improve hemodynamic control in patients with HF. A quasi-experimental design will be used in this investigation. Sixty HF patients will be recruited from Chang Gung Medical Foundation, Keelung Branch after they have provided informed consent. These subjects will be divided into PB (n=30) and non-PB groups (n=30) by their expression of CPET. Patients from each groups received the same therapy and trace course for 2years including CV clinics, CPET and polysomnography. We will measure subjects' physical fitness, oxygen transport and utilization of exercising skeletal muscles, cardiovascular functions and hemodynamics, blood cell parameters, RBC deformity and aggregation, plasma biomarkers of myocardial damage, oxygen stress and quality of life at pre-training stage and following the 6th , 12th, 18th, 24th months of the tracing program. Experimental results were analyzed by descriptive statistics (percentage, mean, and standard deviation), independent t-test, and repeated measure ANOVA. We study the above parameter to realize the physiological response to exercise of these patients and discover the appropriate exercise intensity for prescription for EPB.\n\nThis study employed simultaneously a noninvasive, bio-reactance device (i.e., noninvasive continuous CO monitoring system, NICOM) to assess cardiac hemodynamics, and a near-infrared spectroscopy (NIRS) to monitor changes in cerebral and muscular perfusion/oxygenation. We further elucidated the real-time adaption between ventilator parameter and hemodynamic ones during ventilation oscillation in patients with HF."
+    },
+    "conditionsModule": {
+      "conditions": [
+        "Impaired Oxygen Delivery",
+        "Ischemic Reperfusion Injury"
+      ],
+      "keywords": [
+        "exercise base rehabilitation",
+        "heart failure",
+        "periodic breathing",
+        "aerobic fitness"
+      ]
+    },
+    "designModule": {
+      "studyType": "INTERVENTIONAL",
+      "phases": [
+        "NA"
+      ],
+      "designInfo": {
+        "allocation": "NON_RANDOMIZED",
+        "interventionModel": "PARALLEL",
+        "primaryPurpose": "TREATMENT",
+        "maskingInfo": {
+          "masking": "NONE"
+        }
+      },
+      "enrollmentInfo": {
+        "count": 600,
+        "type": "ACTUAL"
+      }
+    },
+    "armsInterventionsModule": {
+      "armGroups": [
+        {
+          "label": "Non-EPB",
+          "type": "ACTIVE_COMPARATOR",
+          "description": "with exercise",
+          "interventionNames": [
+            "Behavioral: exercise"
+          ]
+        },
+        {
+          "label": "EPB with exercise",
+          "type": "EXPERIMENTAL",
+          "description": "with exercise",
+          "interventionNames": [
+            "Behavioral: exercise"
+          ]
+        }
+      ],
+      "interventions": [
+        {
+          "type": "BEHAVIORAL",
+          "name": "exercise",
+          "description": "36 session supervised exercise intervention",
+          "armGroupLabels": [
+            "EPB with exercise",
+            "Non-EPB"
+          ],
+          "otherNames": [
+            "cardiac rehabilitation"
+          ]
+        }
+      ]
+    },
+    "outcomesModule": {
+      "primaryOutcomes": [
+        {
+          "measure": "VO2 max(maximal oxygen consumption)",
+          "description": "During cardiopulmonary exercise test, we could measure the value of patients' maximal oxygen consumption. It could represent the functional level of heart failure patient and be the mortality prediction.",
+          "timeFrame": "2 years"
+        }
+      ],
+      "secondaryOutcomes": [
+        {
+          "measure": "EPB pattern",
+          "description": "We define the exercise periodic breathing pattern in primary cardiopulmonary exercise test(CPET). After exercise intervention, we analyze the ventilation picture again in follow up CPET. (EPB also a morality prediction )",
+          "timeFrame": "2 years"
+        },
+        {
+          "measure": "All-cause mortality/CV morbidity",
+          "timeFrame": "2 years"
+        }
+      ]
+    },
+    "eligibilityModule": {
+      "eligibilityCriteria": "Inclusion Criteria:\n\n* cardiac event with optimal medial treatment within 3 months and have 4 more weeks spared from heart disease attack or major cardiac procedure.\n\nExclusion Criteria:\n\n* unstable angina pectoris\n* uncompensated heart failure\n* myocardial infarction during the past 4 weeks\n* complex ventricular arrhythmias\n* orthopedic or neurological limitations to exercise",
+      "healthyVolunteers": false,
+      "sex": "ALL",
+      "minimumAge": "18 Years",
+      "stdAges": [
+        "ADULT",
+        "OLDER_ADULT"
+      ]
+    },
+    "contactsLocationsModule": {
+      "overallOfficials": [
+        {
+          "name": "Tieh-Cheng Fu, M.D",
+          "affiliation": "Chang Gung Memorial Hospital",
+          "role": "PRINCIPAL_INVESTIGATOR"
+        }
+      ],
+      "locations": [
+        {
+          "facility": "Dept of Physical Medicine and Rehabilitation, Chang Gung Memorial Hospital",
+          "city": "Keelung",
+          "zip": "204",
+          "country": "Taiwan",
+          "geoPoint": {
+            "lat": 25.13089,
+            "lon": 121.74094
+          }
+        }
+      ]
+    },
+    "referencesModule": {
+      "references": [
+        {
+          "pmid": "16380551",
+          "type": "BACKGROUND",
+          "citation": "Corra U, Pistono M, Mezzani A, Braghiroli A, Giordano A, Lanfranchi P, Bosimini E, Gnemmi M, Giannuzzi P. Sleep and exertional periodic breathing in chronic heart failure: prognostic importance and interdependence. Circulation. 2006 Jan 3;113(1):44-50. doi: 10.1161/CIRCULATIONAHA.105.543173. Epub 2005 Dec 27."
+        },
+        {
+          "pmid": "16282177",
+          "type": "BACKGROUND",
+          "citation": "Bradley TD, Logan AG, Kimoff RJ, Series F, Morrison D, Ferguson K, Belenkie I, Pfeifer M, Fleetham J, Hanly P, Smilovitch M, Tomlinson G, Floras JS; CANPAP Investigators. Continuous positive airway pressure for central sleep apnea and heart failure. N Engl J Med. 2005 Nov 10;353(19):2025-33. doi: 10.1056/NEJMoa051001."
+        },
+        {
+          "pmid": "10477531",
+          "type": "BACKGROUND",
+          "citation": "Francis DP, Davies LC, Piepoli M, Rauchhaus M, Ponikowski P, Coats AJ. Origin of oscillatory kinetics of respiratory gas exchange in chronic heart failure. Circulation. 1999 Sep 7;100(10):1065-70. doi: 10.1161/01.cir.100.10.1065."
+        },
+        {
+          "pmid": "12821243",
+          "type": "BACKGROUND",
+          "citation": "Leite JJ, Mansur AJ, de Freitas HF, Chizola PR, Bocchi EA, Terra-Filho M, Neder JA, Lorenzi-Filho G. Periodic breathing during incremental exercise predicts mortality in patients with chronic heart failure evaluated for cardiac transplantation. J Am Coll Cardiol. 2003 Jun 18;41(12):2175-81. doi: 10.1016/s0735-1097(03)00460-1."
+        },
+        {
+          "pmid": "8020261",
+          "type": "BACKGROUND",
+          "citation": "Yajima T, Koike A, Sugimoto K, Miyahara Y, Marumo F, Hiroe M. Mechanism of periodic breathing in patients with cardiovascular disease. Chest. 1994 Jul;106(1):142-6. doi: 10.1378/chest.106.1.142."
+        }
+      ]
+    }
+  },
+  "derivedSection": {
+    "miscInfoModule": {
+      "versionHolder": "2026-04-02"
+    },
+    "conditionBrowseModule": {
+      "meshes": [
+        {
+          "id": "D006333",
+          "term": "Heart Failure"
+        }
+      ],
+      "ancestors": [
+        {
+          "id": "D006331",
+          "term": "Heart Diseases"
+        },
+        {
+          "id": "D002318",
+          "term": "Cardiovascular Diseases"
+        }
+      ]
+    },
+    "interventionBrowseModule": {
+      "meshes": [
+        {
+          "id": "D015444",
+          "term": "Exercise"
+        },
+        {
+          "id": "D000072038",
+          "term": "Cardiac Rehabilitation"
+        }
+      ],
+      "ancestors": [
+        {
+          "id": "D009043",
+          "term": "Motor Activity"
+        },
+        {
+          "id": "D009068",
+          "term": "Movement"
+        },
+        {
+          "id": "D009142",
+          "term": "Musculoskeletal Physiological Phenomena"
+        },
+        {
+          "id": "D055687",
+          "term": "Musculoskeletal and Neural Physiological Phenomena"
+        },
+        {
+          "id": "D012046",
+          "term": "Rehabilitation"
+        },
+        {
+          "id": "D000359",
+          "term": "Aftercare"
+        },
+        {
+          "id": "D003266",
+          "term": "Continuity of Patient Care"
+        },
+        {
+          "id": "D005791",
+          "term": "Patient Care"
+        },
+        {
+          "id": "D013812",
+          "term": "Therapeutics"
+        },
+        {
+          "id": "D006296",
+          "term": "Health Services"
+        },
+        {
+          "id": "D005159",
+          "term": "Health Care Facilities Workforce and Services"
+        }
+      ]
+    }
+  },
+  "hasResults": false
+}

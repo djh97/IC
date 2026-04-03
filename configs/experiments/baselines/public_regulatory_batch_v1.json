@@ -1,0 +1,40 @@
+{
+  "batch_id": "public_regulatory_batch_v1",
+  "base_run_id": "REPLACE_WITH_PREPARED_RUN_ID",
+  "defaults": {
+    "template_file": "data/raw/examples/base_consent_template.txt",
+    "top_k": 5,
+    "generate_draft": true,
+    "formalize": true,
+    "retrieval_mode": "hybrid",
+    "retrieval_source_groups": [
+      "regulatory_guidance"
+    ]
+  },
+  "cases": [
+    {
+      "case_id": "us_low_literacy_rights",
+      "patient_profile_file": "configs/patient_profiles/example_us_low_literacy.json",
+      "question_set_file": "configs/question_sets/consent_rights_basic.json",
+      "notes": "Low-literacy participant focused on rights and voluntary participation."
+    },
+    {
+      "case_id": "us_low_literacy_participation",
+      "patient_profile_file": "configs/patient_profiles/example_us_low_literacy.json",
+      "question_set_file": "configs/question_sets/study_participation_basics.json",
+      "notes": "Low-literacy participant focused on procedures, risks, benefits, and alternatives."
+    },
+    {
+      "case_id": "us_medium_literacy_rights",
+      "patient_profile_file": "configs/patient_profiles/example_us_medium_literacy.json",
+      "question_set_file": "configs/question_sets/consent_rights_basic.json",
+      "notes": "Medium-literacy participant focused on rights and voluntary participation."
+    },
+    {
+      "case_id": "us_medium_literacy_participation",
+      "patient_profile_file": "configs/patient_profiles/example_us_medium_literacy.json",
+      "question_set_file": "configs/question_sets/study_participation_basics.json",
+      "notes": "Medium-literacy participant focused on procedures, risks, benefits, and alternatives."
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "question_set_id": "consent_rights_basic",
+  "questions": [
+    "Can I leave the study later without any penalty?",
+    "Who can I contact if I have questions?",
+    "Is joining the study my choice?"
+  ]
+}

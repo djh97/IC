@@ -1,0 +1,45 @@
+{
+  "batch_id": "nct03877237_study_grounded_batch_v1",
+  "base_run_id": "REPLACE_WITH_PREPARED_RUN_ID",
+  "defaults": {
+    "template_file": "data/raw/examples/base_consent_template.txt",
+    "top_k": 6,
+    "generate_draft": true,
+    "formalize": true,
+    "retrieval_mode": "hybrid",
+    "retrieval_filter_logic": "union",
+    "retrieval_source_groups": [
+      "regulatory_guidance",
+      "trial_materials"
+    ],
+    "retrieval_source_ids": [
+      "nct03877237"
+    ]
+  },
+  "cases": [
+    {
+      "case_id": "nct03877237_low_literacy_rights",
+      "patient_profile_file": "configs/patient_profiles/example_us_low_literacy.json",
+      "question_set_file": "configs/question_sets/consent_rights_basic.json",
+      "notes": "Low-literacy participant focused on rights within the dapagliflozin HFrEF study."
+    },
+    {
+      "case_id": "nct03877237_low_literacy_study_specifics",
+      "patient_profile_file": "configs/patient_profiles/example_us_low_literacy.json",
+      "question_set_file": "configs/question_sets/study_specific_basics.json",
+      "notes": "Low-literacy participant focused on the concrete study facts for NCT03877237."
+    },
+    {
+      "case_id": "nct03877237_medium_literacy_rights",
+      "patient_profile_file": "configs/patient_profiles/example_us_medium_literacy.json",
+      "question_set_file": "configs/question_sets/consent_rights_basic.json",
+      "notes": "Medium-literacy participant focused on rights within the dapagliflozin HFrEF study."
+    },
+    {
+      "case_id": "nct03877237_medium_literacy_study_specifics",
+      "patient_profile_file": "configs/patient_profiles/example_us_medium_literacy.json",
+      "question_set_file": "configs/question_sets/study_specific_basics.json",
+      "notes": "Medium-literacy participant focused on the concrete study facts for NCT03877237."
+    }
+  ]
+}

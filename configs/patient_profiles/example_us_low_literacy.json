@@ -1,0 +1,12 @@
+{
+  "participant_id": "demo-us-low-001",
+  "age": 56,
+  "language": "en",
+  "health_literacy": "low",
+  "jurisdiction": "US",
+  "notes": {
+    "education_level": "high_school_or_less",
+    "prefers_short_sentences": true,
+    "needs_plain_language": true
+  }
+}

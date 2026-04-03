@@ -1,0 +1,26 @@
+{
+  "version": "0.1.0",
+  "description": "Manual review rubric for small-scale qualitative assessment of informed consent outputs.",
+  "dimensions": [
+    {
+      "name": "grounding_fidelity",
+      "question": "Is the output faithful to the provided source material without unsupported claims?",
+      "scale": [1, 2, 3, 4, 5]
+    },
+    {
+      "name": "clarity",
+      "question": "Is the language clear and understandable for the intended participant profile?",
+      "scale": [1, 2, 3, 4, 5]
+    },
+    {
+      "name": "consent_element_coverage",
+      "question": "Does the output cover the key consent elements expected for the task?",
+      "scale": [1, 2, 3, 4, 5]
+    },
+    {
+      "name": "citation_usefulness",
+      "question": "Are the citations helpful and appropriate for traceability?",
+      "scale": [1, 2, 3, 4, 5]
+    }
+  ]
+}

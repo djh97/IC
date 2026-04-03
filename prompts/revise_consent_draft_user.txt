@@ -1,0 +1,57 @@
+Participant profile:
+${participant_profile_json}
+
+Base consent template:
+${base_template_text}
+
+Current draft JSON:
+${current_draft_json}
+
+Draft audit:
+${draft_audit_json}
+
+Draft content plan:
+${draft_content_plan_json}
+
+Recovery targets:
+${recovery_targets_json}
+
+Focused recovery context:
+${focused_recovery_context}
+
+Readability guidance:
+${readability_guidance}
+
+Study-specific grounding context:
+${study_specific_context}
+
+Regulatory grounding context:
+${regulatory_context}
+
+Other grounding context:
+${other_grounding_context}
+
+Instructions:
+- Revise the current draft to address the audit issues.
+- Use the draft content plan as the structural checklist for the revision.
+- Use the recovery targets as the highest-priority checklist when they are present.
+- Use the focused recovery context first for those recovery targets before falling back to the broader context.
+- If the draft content plan marks study procedures, benefits, or alternatives as supported or partially supported, do not drop them from the fuller draft during simplification.
+- Focus first on the listed missing consent topics and weak citation coverage.
+- Keep grounded sentences that are already correct unless they need simplification or better citation placement.
+- If the current draft already covers a topic, prefer simplifying or tightening it instead of adding another sentence about the same point.
+- If the audit says a topic is missing, add a short supported statement when the evidence allows it.
+- If the evidence does not support a topic, do not invent it. Keep the draft honest and note the limitation in grounding_limitations.
+- Use inline markers such as [1] or [2] inside the summary text and the fuller consent text.
+- When a sentence states a concrete study fact or participant right and a marker is available, include the marker in that sentence.
+- Keep the summary concise.
+- Keep the fuller consent text meaningfully fuller than the summary.
+- Use plain language aligned with the participant profile and readability guidance.
+- For low-literacy participants, keep the full draft short and avoid formal phrases when a simpler faithful phrase is possible.
+- Return valid JSON with exactly these top-level fields:
+  - key_information_summary
+  - key_information_citation_markers_used
+  - personalized_consent_text
+  - citation_markers_used
+  - personalization_rationale
+  - grounding_limitations

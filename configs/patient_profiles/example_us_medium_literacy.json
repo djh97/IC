@@ -1,0 +1,11 @@
+{
+  "participant_id": "demo-us-medium-001",
+  "age": 42,
+  "language": "en",
+  "health_literacy": "medium",
+  "jurisdiction": "US",
+  "notes": {
+    "education_level": "college",
+    "prefers_balanced_detail": true
+  }
+}

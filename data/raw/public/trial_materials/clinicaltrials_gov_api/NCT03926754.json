@@ -1,0 +1,230 @@
+{
+  "protocolSection": {
+    "identificationModule": {
+      "nctId": "NCT03926754",
+      "orgStudyIdInfo": {
+        "id": "2016-002367-34"
+      },
+      "secondaryIdInfos": [
+        {
+          "id": "H-16030780",
+          "type": "OTHER",
+          "domain": "Regional Ethics Committee"
+        }
+      ],
+      "organization": {
+        "fullName": "Rigshospitalet, Denmark",
+        "class": "OTHER"
+      },
+      "briefTitle": "Beta 3 Agonist Treatment in Heart Failure-2",
+      "officialTitle": "Beta 3 Agonist Treatment in Heart Failure-2",
+      "acronym": "BEAT-HF II"
+    },
+    "statusModule": {
+      "statusVerifiedDate": "2022-04",
+      "overallStatus": "COMPLETED",
+      "expandedAccessInfo": {
+        "hasExpandedAccess": false
+      },
+      "startDateStruct": {
+        "date": "2017-01-23",
+        "type": "ACTUAL"
+      },
+      "primaryCompletionDateStruct": {
+        "date": "2021-01-21",
+        "type": "ACTUAL"
+      },
+      "completionDateStruct": {
+        "date": "2021-01-21",
+        "type": "ACTUAL"
+      },
+      "studyFirstSubmitDate": "2017-07-04",
+      "studyFirstSubmitQcDate": "2019-04-23",
+      "studyFirstPostDateStruct": {
+        "date": "2019-04-24",
+        "type": "ACTUAL"
+      },
+      "lastUpdateSubmitDate": "2022-04-28",
+      "lastUpdatePostDateStruct": {
+        "date": "2022-05-04",
+        "type": "ACTUAL"
+      }
+    },
+    "sponsorCollaboratorsModule": {
+      "responsibleParty": {
+        "type": "SPONSOR_INVESTIGATOR",
+        "investigatorFullName": "Henning Bundgaard",
+        "investigatorTitle": "Professor",
+        "investigatorAffiliation": "Rigshospitalet, Denmark"
+      },
+      "leadSponsor": {
+        "name": "Henning Bundgaard",
+        "class": "OTHER"
+      },
+      "collaborators": [
+        {
+          "name": "University Hospital Bispebjerg and Frederiksberg",
+          "class": "OTHER"
+        },
+        {
+          "name": "Hiller\u00f8d hospital, Denmark",
+          "class": "UNKNOWN"
+        },
+        {
+          "name": "Herlev Hospital",
+          "class": "OTHER"
+        },
+        {
+          "name": "Hvidovre University Hospital",
+          "class": "OTHER"
+        },
+        {
+          "name": "Bornholm Hospital, Denmark",
+          "class": "UNKNOWN"
+        },
+        {
+          "name": "Royal North Shore Hospital",
+          "class": "OTHER"
+        }
+      ]
+    },
+    "oversightModule": {
+      "oversightHasDmc": true,
+      "isFdaRegulatedDrug": false,
+      "isFdaRegulatedDevice": false,
+      "isUsExport": false
+    },
+    "descriptionModule": {
+      "briefSummary": "Objective: The objective of the study is to assess the structural and functional cardiac effects of treatment with the beta 3 AR agonist Mirabegron in patients with moderate to severe chronic heart failure (LVEF\\<35%, NYHA III-IV).\n\nThe study is a randomized, placebo-controlled, double-blinded trial in two phases with two hypotheses:\n\nChronic study - study A: Long-term treatment (3 months) with the \u03b23 adrenergic receptor agonist Mirabegron is beneficial in patients with moderate to severe human heart failure\n\nInvasive study - Study B: Administration of Mirabegron in patients with heart failure leads to an immediate increase in cardiac output at a constant or reduced left ventricular filling pressure during submaximal exercise\n\nSpecific aims\n\n1. Determine safety of administration of Mirabegron to patients with moderate to severe heart failure.\n2. Determine if treatment with Mirabegron for 3 months induces beneficial cardiac structural remodelling in patients with moderate to severe heart failure. In an open-label follow-up to determine the effects of Mirabegron after an extended duration (a total of 12 months).\n3. Determine if Mirabegron improves symptoms and exercise capacity as indicated by questionnaires and 6 min walk test in patients with moderate to severe heart failure.\n4. Determine effects of Mirabegron on cardiac conduction, repolarisation and rhythms and arrhythmias in patients with moderate to severe heart failure.\n5. Determine effects of Mirabegron on circulating biomarkers in patients with moderate to severe heart failure.\n6. Determine the immediate and short term haemodynamic effects of Mirabron as measured by CT and invasively."
+    },
+    "conditionsModule": {
+      "conditions": [
+        "Heart Failure With Reduced Ejection Fraction NYHA Class III-IV"
+      ]
+    },
+    "designModule": {
+      "studyType": "INTERVENTIONAL",
+      "phases": [
+        "PHASE2",
+        "PHASE3"
+      ],
+      "designInfo": {
+        "allocation": "RANDOMIZED",
+        "interventionModel": "PARALLEL",
+        "primaryPurpose": "TREATMENT",
+        "maskingInfo": {
+          "masking": "QUADRUPLE",
+          "whoMasked": [
+            "PARTICIPANT",
+            "CARE_PROVIDER",
+            "INVESTIGATOR",
+            "OUTCOMES_ASSESSOR"
+          ]
+        }
+      },
+      "enrollmentInfo": {
+        "count": 56,
+        "type": "ACTUAL"
+      }
+    },
+    "armsInterventionsModule": {
+      "armGroups": [
+        {
+          "label": "Mirabegron",
+          "type": "ACTIVE_COMPARATOR",
+          "description": "Active treatment arm (mirabegron)",
+          "interventionNames": [
+            "Drug: Mirabegron"
+          ]
+        },
+        {
+          "label": "Placebo",
+          "type": "PLACEBO_COMPARATOR",
+          "description": "Placebo",
+          "interventionNames": [
+            "Drug: Mirabegron"
+          ]
+        }
+      ],
+      "interventions": [
+        {
+          "type": "DRUG",
+          "name": "Mirabegron",
+          "description": "Study A The maximum tolerated dose up to a maximum of 300 mg per day for 26 weeks.\n\nStudy B One single dose of 300 mg at day one followed by 150 mg x 2 for 1 week (8-11 days).",
+          "armGroupLabels": [
+            "Mirabegron",
+            "Placebo"
+          ],
+          "otherNames": [
+            "Placebo"
+          ]
+        }
+      ]
+    },
+    "outcomesModule": {
+      "primaryOutcomes": [
+        {
+          "measure": "Increase in left ventricular ejection fraction as measured by computed tomography",
+          "description": "Study A",
+          "timeFrame": "3 months"
+        },
+        {
+          "measure": "Change in invasive hemodynamics assesses by right heart catherization",
+          "description": "Study B is explorative assessing the effect on invasive parameters including cardiac output, pulmonary wedge pressure and pulmonary and systemic vascular resistance.",
+          "timeFrame": "At 3 hours and at 1 week"
+        }
+      ]
+    },
+    "eligibilityModule": {
+      "eligibilityCriteria": "Inclusion Criteria:\n\n1. Stable heart failure NYHA class III-IV on ischemic or non-ischemic basis\n2. Left ventricular ejection fraction (LVEF) \\< 35% as assessed by cardiac CT\n3. NT proBNP \\> 1000 pg/ml\n4. On optimised evidence-based pharmacological HF treatment stable \u22652 weeks with no current plan for changing HF therapy. The therapy must include a beta-blocker.\n5. No change in diuretics \u22641 week\n6. No admittances to hospital for treatment with intravenously administered positive inotropic agents \u2264 4 weeks.\n7. \\>18 years\n\nExclusion Criteria:\n\n1. Acute myocardial infarction (AMI) or revascularisation \\< 3 month ago\n2. Uncorrected significant primary obstructive valve disease\n3. Planned major surgery including cardiac revascularisation\n4. Hemodynamically significant obstructive cardiomyopathy\n5. Acute myocarditis or constrictive pericarditis\n6. Clinically significant hepatic (transaminases or bilirubin x 3 above upper reference level) or renal (GFR\\< 30 ml/min/1,73 m2) diseases\n7. Heart failure due to uncorrected thyroid disease\n8. Cardiac mechanical support\n9. \\< 6 months after CRT\n10. Uncontrolled hypotension (defined as symptomatic systolic blood pressure \\< 80 mmHg) - or hypertension (defined as systolic at 180 mmHg or above and/or diastolic blood pressure at 110 mmHg or below)\n11. Unable to give informed consent\n12. Reduced compliance\n13. All women of child bearing potential will be required to use adequate contraception\n14. Pregnant or lactating women\n15. Treatment with a tricyclic antidepressant or CYP2D6 substrates other than beta-blockers or treatment with digoxin.\n16. Known allergy to iodine containing contrast\n17. Estimated GFR \\< 30 ml/min/1.73 m2\n18. Congenital or drug induced QT prolongation",
+      "healthyVolunteers": false,
+      "sex": "ALL",
+      "minimumAge": "18 Years",
+      "stdAges": [
+        "ADULT",
+        "OLDER_ADULT"
+      ]
+    },
+    "contactsLocationsModule": {
+      "locations": [
+        {
+          "facility": "Rigshospitalet",
+          "city": "Copenhagen",
+          "zip": "2100",
+          "country": "Denmark",
+          "geoPoint": {
+            "lat": 55.67594,
+            "lon": 12.56553
+          }
+        }
+      ]
+    },
+    "referencesModule": {
+      "references": [
+        {
+          "pmid": "27990717",
+          "type": "BACKGROUND",
+          "citation": "Bundgaard H, Axelsson A, Hartvig Thomsen J, Sorgaard M, Kofoed KF, Hasselbalch R, Fry NA, Valeur N, Boesgaard S, Gustafsson F, Kober L, Iversen K, Rasmussen HH. The first-in-man randomized trial of a beta3 adrenoceptor agonist in chronic heart failure: the BEAT-HF trial. Eur J Heart Fail. 2017 Apr;19(4):566-575. doi: 10.1002/ejhf.714. Epub 2016 Dec 18."
+        }
+      ]
+    },
+    "ipdSharingStatementModule": {
+      "ipdSharing": "UNDECIDED",
+      "description": "Because of the sensitive nature of the data collected for this study, requests to access the dataset from qualified researchers trained in human subject confidentiality protocols may be sent to the principal investigator."
+    }
+  },
+  "derivedSection": {
+    "miscInfoModule": {
+      "versionHolder": "2026-04-02"
+    },
+    "interventionBrowseModule": {
+      "meshes": [
+        {
+          "id": "C520025",
+          "term": "mirabegron"
+        }
+      ]
+    }
+  },
+  "hasResults": false
+}

@@ -1,0 +1,53 @@
+{
+  "benchmark_id": "public_regulatory_checks_v1",
+  "description": "Sanity checks for retrieval over public regulatory guidance related to informed consent and participant rights.",
+  "defaults": {
+    "top_k": 5,
+    "modes": [
+      "lexical",
+      "dense",
+      "hybrid"
+    ],
+    "source_group_filters": [
+      "regulatory_guidance"
+    ]
+  },
+  "queries": [
+    {
+      "query_id": "withdrawal_rights",
+      "query": "Can a participant stop taking part in the study without penalty or loss of benefits?",
+      "expected_source_ids": [
+        "fda_informed_consent_guidance_2023",
+        "ich_e6_r3_2025"
+      ],
+      "expected_source_groups": [
+        "regulatory_guidance"
+      ],
+      "notes": "Withdrawal rights and voluntary participation language should be surfaced."
+    },
+    {
+      "query_id": "questions_and_contacts",
+      "query": "Does informed consent need to tell participants how to ask questions about the study?",
+      "expected_source_ids": [
+        "fda_informed_consent_guidance_2023",
+        "ich_e6_r3_2025"
+      ],
+      "expected_source_groups": [
+        "regulatory_guidance"
+      ],
+      "notes": "Participant rights to ask questions and contact information expectations should be retrievable."
+    },
+    {
+      "query_id": "risks_benefits_alternatives",
+      "query": "What should informed consent explain about risks, possible benefits, and alternatives?",
+      "expected_source_ids": [
+        "fda_informed_consent_guidance_2023",
+        "ich_e6_r3_2025"
+      ],
+      "expected_source_groups": [
+        "regulatory_guidance"
+      ],
+      "notes": "Core consent content around risks, benefits, and alternatives should be present."
+    }
+  ]
+}

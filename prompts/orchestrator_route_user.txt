@@ -1,0 +1,11 @@
+User request:
+${user_input}
+
+Current run state:
+- draft_available: ${draft_available}
+- template_available: ${template_available}
+
+Instructions:
+- Decide the best next agent for this request.
+- If the request is blocked by missing prerequisites, choose clarification and explain the block.
+- Keep the reason concise and concrete.
