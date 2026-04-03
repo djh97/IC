@@ -19,14 +19,30 @@ This directory groups batch specifications by purpose so pilot runs, benchmarks,
 
 1. `pilots/nct03877237_single_case_pilot_v1.json`
    Use this first to confirm the live study-grounded path works end to end.
-2. `single_study/nct03877237_study_grounded_batch_v1.json`
+2. `pilots/nct03877237_comparison_pilot_full_agentic_v1.json`
+   Use this with the matching `generic_rag` and `vanilla_llm` pilot specs for a small three-way comparison before any long rerun.
+3. `single_study/nct03877237_study_grounded_batch_v1.json`
    Use this when you want a richer single-study batch around the reference case.
-3. `multi_study/hf_interventional_multi_study_v1.json`
+4. `multi_study/hf_interventional_multi_study_v1.json`
    Use this for the real multi-study benchmark after the pilot succeeds.
-4. `baselines/hf_interventional_multi_study_generic_rag_v1.json`
+5. `baselines/hf_interventional_multi_study_generic_rag_v1.json`
    Use this as the retrieval-grounded baseline without the full agentic planning and revision loop.
-5. `baselines/hf_interventional_multi_study_vanilla_llm_v1.json`
+6. `baselines/hf_interventional_multi_study_vanilla_llm_v1.json`
    Use this as the no-retrieval baseline when you want a cleaner ablation against the full system.
+
+The comparison pilot set is:
+
+- `pilots/nct03877237_comparison_pilot_full_agentic_v1.json`
+- `pilots/nct03877237_comparison_pilot_generic_rag_v1.json`
+- `pilots/nct03877237_comparison_pilot_vanilla_llm_v1.json`
+
+Each pilot spec expands to the same 6 cases:
+
+- 1 study: `nct03877237`
+- 2 participant profiles
+- 3 question sets
+
+Run them with `--base-run-id <prepared_run_id>` so the checked-in specs stay reusable across rebuilt corpora.
 
 ## Naming
 
