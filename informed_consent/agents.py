@@ -643,6 +643,8 @@ class PersonalizationAgent(BaseAgent):
             "source_group_filters": retrieval_artifacts["source_group_filters"],
             "source_id_filters": retrieval_artifacts["source_id_filters"],
             "filter_logic_used": retrieval_artifacts["filter_logic_used"],
+            "retrieval_strategy_used": retrieval_artifacts.get("scoped_retrieval_strategy")
+            or ("no_retrieval" if retrieval_artifacts["mode_used"] == "none" else "single_pass"),
             "filtered_chunk_count": retrieval_artifacts["filtered_chunk_count"],
             "lexical_hits": retrieval_artifacts["lexical_hits"],
             "dense_hits": retrieval_artifacts["dense_hits"],
@@ -822,6 +824,8 @@ class PersonalizationAgent(BaseAgent):
             "source_group_filters": retrieval_artifacts["source_group_filters"],
             "source_id_filters": retrieval_artifacts["source_id_filters"],
             "filter_logic_used": retrieval_artifacts["filter_logic_used"],
+            "retrieval_strategy_used": retrieval_artifacts.get("scoped_retrieval_strategy")
+            or ("no_retrieval" if retrieval_artifacts["mode_used"] == "none" else "single_pass"),
             "filtered_chunk_count": retrieval_artifacts["filtered_chunk_count"],
             "lexical_hits": retrieval_artifacts["lexical_hits"],
             "dense_hits": retrieval_artifacts["dense_hits"],
@@ -1006,6 +1010,8 @@ class ConversationalAgent(BaseAgent):
             "source_group_filters": retrieval_artifacts["source_group_filters"],
             "source_id_filters": retrieval_artifacts["source_id_filters"],
             "filter_logic_used": retrieval_artifacts["filter_logic_used"],
+            "retrieval_strategy_used": retrieval_artifacts.get("scoped_retrieval_strategy")
+            or ("no_retrieval" if retrieval_artifacts["mode_used"] == "none" else "single_pass"),
             "filtered_chunk_count": retrieval_artifacts["filtered_chunk_count"],
             "lexical_hits": retrieval_artifacts["lexical_hits"],
             "dense_hits": retrieval_artifacts["dense_hits"],

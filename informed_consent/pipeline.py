@@ -1492,6 +1492,7 @@ class ConsentPipeline:
                 "retrieval_mode": effective_retrieval_mode,
                 "retrieval_top_k": top_k or self.config.retrieval.top_k,
                 "retrieval_filter_logic": retrieval_filter_logic,
+                "retrieval_filter_logic_config": retrieval_filter_logic,
                 "retrieval_source_groups": retrieval_source_groups,
                 "retrieval_source_ids": retrieval_source_ids,
                 "dry_run": dry_run,
@@ -1525,6 +1526,12 @@ class ConsentPipeline:
                 "retrieval_source_groups": retrieval_source_groups,
                 "retrieval_source_ids": retrieval_source_ids,
                 "retrieval_filter_logic": retrieval_filter_logic,
+                "retrieval_filter_logic_config": retrieval_filter_logic,
+                "retrieval_filter_logic_effective": None,
+                "draft_retrieval_filter_logic_effective": None,
+                "qa_retrieval_filter_logic_effective": [],
+                "draft_retrieval_strategy_effective": None,
+                "qa_retrieval_strategy_effective": [],
                 "model_id": batch_runtime_metadata.get("model_id"),
                 "embedding_model_id": batch_runtime_metadata.get("embedding_model_id"),
                 "config_path": batch_runtime_metadata.get("config_path"),
@@ -1600,6 +1607,11 @@ class ConsentPipeline:
                 case_result["formalization_user_prompt_id"] = summary_metadata.get("formalization_user_prompt_id")
                 case_result["qa_system_prompt_ids"] = summary_metadata.get("qa_system_prompt_ids", [])
                 case_result["qa_user_prompt_ids"] = summary_metadata.get("qa_user_prompt_ids", [])
+                case_result["retrieval_filter_logic_effective"] = summary_metadata.get("retrieval_filter_logic")
+                case_result["draft_retrieval_filter_logic_effective"] = summary_metadata.get("draft_retrieval_filter_logic_effective")
+                case_result["qa_retrieval_filter_logic_effective"] = summary_metadata.get("qa_retrieval_filter_logic_effective", [])
+                case_result["draft_retrieval_strategy_effective"] = summary_metadata.get("draft_retrieval_strategy_effective")
+                case_result["qa_retrieval_strategy_effective"] = summary_metadata.get("qa_retrieval_strategy_effective", [])
                 draft_summary = summary.get("draft", {})
                 structured_summary = summary.get("structured_record", {})
                 qa_summary = summary.get("qa_answers", {})
@@ -1653,6 +1665,12 @@ class ConsentPipeline:
                         "retrieval_mode": effective_retrieval_mode,
                         "retrieval_top_k": summary_metadata.get("retrieval_top_k") or (top_k or self.config.retrieval.top_k),
                         "retrieval_filter_logic": retrieval_filter_logic,
+                        "retrieval_filter_logic_config": retrieval_filter_logic,
+                        "retrieval_filter_logic_effective": summary_metadata.get("retrieval_filter_logic"),
+                        "draft_retrieval_filter_logic_effective": summary_metadata.get("draft_retrieval_filter_logic_effective"),
+                        "qa_retrieval_filter_logic_effective": "|".join(summary_metadata.get("qa_retrieval_filter_logic_effective", []) or []),
+                        "draft_retrieval_strategy_effective": summary_metadata.get("draft_retrieval_strategy_effective"),
+                        "qa_retrieval_strategy_effective": "|".join(summary_metadata.get("qa_retrieval_strategy_effective", []) or []),
                         "retrieval_source_groups": "|".join(retrieval_source_groups),
                         "retrieval_source_ids": "|".join(retrieval_source_ids),
                         "draft_system_prompt_id": summary_metadata.get("draft_system_prompt_id"),
@@ -1763,6 +1781,12 @@ class ConsentPipeline:
                         "retrieval_mode": effective_retrieval_mode,
                         "retrieval_top_k": top_k or self.config.retrieval.top_k,
                         "retrieval_filter_logic": retrieval_filter_logic,
+                        "retrieval_filter_logic_config": retrieval_filter_logic,
+                        "retrieval_filter_logic_effective": None,
+                        "draft_retrieval_filter_logic_effective": None,
+                        "qa_retrieval_filter_logic_effective": None,
+                        "draft_retrieval_strategy_effective": None,
+                        "qa_retrieval_strategy_effective": None,
                         "retrieval_source_groups": "|".join(retrieval_source_groups),
                         "retrieval_source_ids": "|".join(retrieval_source_ids),
                         "question_count": len(questions),
@@ -2037,6 +2061,58 @@ class ConsentPipeline:
                 if str(case.get("retrieval_filter_logic", "")).strip()
             }
         )
+        summary_payload["retrieval_filter_logic_configs"] = sorted(
+            {
+                str(case.get("retrieval_filter_logic_config", "")).strip()
+                for case in case_records
+                if str(case.get("retrieval_filter_logic_config", "")).strip()
+            }
+        )
+        summary_payload["retrieval_filter_logic_effective_values"] = sorted(
+            {
+                str(case.get("retrieval_filter_logic_effective", "")).strip()
+                for case in case_records
+                if str(case.get("retrieval_filter_logic_effective", "")).strip()
+            }
+        )
+        summary_payload["draft_retrieval_filter_logic_effective_values"] = sorted(
+            {
+                str(case.get("draft_retrieval_filter_logic_effective", "")).strip()
+                for case in case_records
+                if str(case.get("draft_retrieval_filter_logic_effective", "")).strip()
+            }
+        )
+        summary_payload["qa_retrieval_filter_logic_effective_values"] = sorted(
+            {
+                str(value).strip()
+                for case in case_records
+                for value in (
+                    case.get("qa_retrieval_filter_logic_effective", [])
+                    if isinstance(case.get("qa_retrieval_filter_logic_effective"), list)
+                    else str(case.get("qa_retrieval_filter_logic_effective", "")).split("|")
+                )
+                if str(value).strip()
+            }
+        )
+        summary_payload["draft_retrieval_strategy_effective_values"] = sorted(
+            {
+                str(case.get("draft_retrieval_strategy_effective", "")).strip()
+                for case in case_records
+                if str(case.get("draft_retrieval_strategy_effective", "")).strip()
+            }
+        )
+        summary_payload["qa_retrieval_strategy_effective_values"] = sorted(
+            {
+                str(value).strip()
+                for case in case_records
+                for value in (
+                    case.get("qa_retrieval_strategy_effective", [])
+                    if isinstance(case.get("qa_retrieval_strategy_effective"), list)
+                    else str(case.get("qa_retrieval_strategy_effective", "")).split("|")
+                )
+                if str(value).strip()
+            }
+        )
         summary_payload["draft_system_prompt_ids"] = sorted(
             {
                 str(case.get("draft_system_prompt_id", "")).strip()
@@ -2172,6 +2248,12 @@ class ConsentPipeline:
                     "retrieval_modes": "|".join(payload.get("retrieval_modes", []) or []),
                     "retrieval_top_k_values": "|".join(str(value) for value in (payload.get("retrieval_top_k_values", []) or [])),
                     "retrieval_filter_logics": "|".join(payload.get("retrieval_filter_logics", []) or []),
+                    "retrieval_filter_logic_configs": "|".join(payload.get("retrieval_filter_logic_configs", []) or []),
+                    "retrieval_filter_logic_effective_values": "|".join(payload.get("retrieval_filter_logic_effective_values", []) or []),
+                    "draft_retrieval_filter_logic_effective_values": "|".join(payload.get("draft_retrieval_filter_logic_effective_values", []) or []),
+                    "qa_retrieval_filter_logic_effective_values": "|".join(payload.get("qa_retrieval_filter_logic_effective_values", []) or []),
+                    "draft_retrieval_strategy_effective_values": "|".join(payload.get("draft_retrieval_strategy_effective_values", []) or []),
+                    "qa_retrieval_strategy_effective_values": "|".join(payload.get("qa_retrieval_strategy_effective_values", []) or []),
                     "draft_system_prompt_ids": "|".join(payload.get("draft_system_prompt_ids", []) or []),
                     "draft_user_prompt_ids": "|".join(payload.get("draft_user_prompt_ids", []) or []),
                     "formalization_system_prompt_ids": "|".join(payload.get("formalization_system_prompt_ids", []) or []),
@@ -2272,6 +2354,12 @@ class ConsentPipeline:
                         "retrieval_mode": str(row.get("retrieval_mode", "")).strip() or None,
                         "retrieval_top_k": row.get("retrieval_top_k"),
                         "retrieval_filter_logic": str(row.get("retrieval_filter_logic", "")).strip() or None,
+                        "retrieval_filter_logic_config": str(row.get("retrieval_filter_logic_config", "")).strip() or None,
+                        "retrieval_filter_logic_effective": str(row.get("retrieval_filter_logic_effective", "")).strip() or None,
+                        "draft_retrieval_filter_logic_effective": str(row.get("draft_retrieval_filter_logic_effective", "")).strip() or None,
+                        "qa_retrieval_filter_logic_effective": str(row.get("qa_retrieval_filter_logic_effective", "")).strip() or None,
+                        "draft_retrieval_strategy_effective": str(row.get("draft_retrieval_strategy_effective", "")).strip() or None,
+                        "qa_retrieval_strategy_effective": str(row.get("qa_retrieval_strategy_effective", "")).strip() or None,
                         "draft_system_prompt_id": str(row.get("draft_system_prompt_id", "")).strip() or None,
                         "draft_user_prompt_id": str(row.get("draft_user_prompt_id", "")).strip() or None,
                         "formalization_system_prompt_id": str(row.get("formalization_system_prompt_id", "")).strip() or None,

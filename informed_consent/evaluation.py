@@ -263,6 +263,15 @@ def merge_prompt_identifier_sets(items: list[dict[str, Any]]) -> dict[str, list[
     return merged
 
 
+def merge_unique_string_values(values: list[Any]) -> list[str]:
+    merged: list[str] = []
+    for value in values:
+        text = str(value or "").strip()
+        if text and text not in merged:
+            merged.append(text)
+    return merged
+
+
 def explicit_grounding_gap_declared(text: str, *, limitations: list[str] | None = None) -> bool:
     if isinstance(limitations, list) and any(str(item).strip() for item in limitations):
         return True
@@ -751,19 +760,38 @@ def evaluate_run_outputs(run_id: str, run_dir: Path) -> dict[str, Any]:
     qa_dir = outputs_dir / "qa"
     qa_index_path = qa_dir / "qa_index.jsonl"
     qa_index_rows = deduplicate_qa_index_rows(load_jsonl(qa_index_path))
+    qa_request_bundles: list[dict[str, Any]] = []
+    for row in qa_index_rows:
+        request_bundle_path = row.get("request_bundle_path")
+        if not request_bundle_path:
+            continue
+        path = Path(str(request_bundle_path))
+        if not path.exists():
+            continue
+        payload = load_json(path)
+        if isinstance(payload, dict):
+            qa_request_bundles.append(payload)
     qa_prompt_identifiers = merge_prompt_identifier_sets(
-        [
-            normalize_prompt_identifiers(payload)
-            for payload in (
-                load_json(Path(str(row.get("request_bundle_path"))))
-                for row in qa_index_rows
-                if row.get("request_bundle_path") and Path(str(row.get("request_bundle_path"))).exists()
-            )
-            if isinstance(payload, dict)
-        ]
+        [normalize_prompt_identifiers(payload) for payload in qa_request_bundles]
     )
     draft_prompt_identifiers = normalize_prompt_identifiers(draft_request_bundle) if draft_request_bundle else {}
     formalization_prompt_identifiers = normalize_prompt_identifiers(formalization_request_bundle) if formalization_request_bundle else {}
+    qa_effective_filter_logics = merge_unique_string_values(
+        [payload.get("filter_logic_used") for payload in qa_request_bundles]
+    )
+    qa_effective_strategies = merge_unique_string_values(
+        [
+            payload.get("retrieval_strategy_used")
+            or ("no_retrieval" if str(payload.get("retrieval_mode_used") or "").strip().lower() == "none" else "single_pass")
+            for payload in qa_request_bundles
+        ]
+    )
+    draft_effective_filter_logic = str(draft_request_bundle.get("filter_logic_used") or "").strip() or None
+    draft_effective_strategy = str(
+        draft_request_bundle.get("retrieval_strategy_used")
+        or ("no_retrieval" if str(draft_request_bundle.get("retrieval_mode_used") or "").strip().lower() == "none" else "single_pass")
+    ).strip() if draft_request_bundle else None
+    draft_effective_strategy = draft_effective_strategy or None
     summary_metadata = {
         "run_id": run_id,
         "study_id": str(manifest_payload.get("study_id") or "").strip() or None,
@@ -795,11 +823,16 @@ def evaluate_run_outputs(run_id: str, run_dir: Path) -> dict[str, Any]:
             or ""
         ).strip() or None,
         "retrieval_top_k": draft_request_bundle.get("top_k") or context_metadata.get("retrieval_top_k") or runtime_metadata.get("retrieval_default_top_k"),
+        "retrieval_filter_logic_config": str(context_metadata.get("retrieval_filter_logic") or "").strip() or None,
         "retrieval_filter_logic": str(
             draft_request_bundle.get("filter_logic_used")
             or context_metadata.get("retrieval_filter_logic")
             or ""
         ).strip() or None,
+        "draft_retrieval_filter_logic_effective": draft_effective_filter_logic,
+        "qa_retrieval_filter_logic_effective": qa_effective_filter_logics,
+        "draft_retrieval_strategy_effective": draft_effective_strategy,
+        "qa_retrieval_strategy_effective": qa_effective_strategies,
         "config_path": str(context_metadata.get("config_path") or runtime_metadata.get("config_path") or "").strip() or None,
         "git_commit_hash": str(runtime_metadata.get("git_commit_hash") or "").strip() or None,
         "corpus_version": str(context_metadata.get("base_run_id") or runtime_metadata.get("corpus_version") or "").strip() or None,

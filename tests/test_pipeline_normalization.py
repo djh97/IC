@@ -236,13 +236,17 @@ class PipelineNormalizationTests(unittest.TestCase):
                     [
                         (
                             "workflow_variant,question_set_label,model_id,embedding_model_id,retrieval_mode,retrieval_top_k,"
-                            "retrieval_filter_logic,draft_system_prompt_id,draft_user_prompt_id,qa_system_prompt_ids,"
+                            "retrieval_filter_logic,retrieval_filter_logic_config,retrieval_filter_logic_effective,"
+                            "draft_retrieval_filter_logic_effective,qa_retrieval_filter_logic_effective,"
+                            "draft_retrieval_strategy_effective,qa_retrieval_strategy_effective,"
+                            "draft_system_prompt_id,draft_user_prompt_id,qa_system_prompt_ids,"
                             "qa_user_prompt_ids,config_path,git_commit_hash,corpus_version,index_version,random_seed,"
                             "draft_required_element_coverage_ratio,draft_study_specific_grounding_met,qa_abstention_rate,"
                             "failure_missing_selected_study_grounding"
                         ),
                         (
-                            "full_agentic,study_specific_basics,Qwen/Qwen3-8B,BAAI/bge-small-en-v1.5,hybrid,6,union,"
+                            "full_agentic,study_specific_basics,Qwen/Qwen3-8B,BAAI/bge-small-en-v1.5,hybrid,6,union,union,intersection,"
+                            "intersection,intersection,study_plus_regulatory_split,study_plus_regulatory_split,"
                             "draft_system_v1,draft_user_v1,qa_system_v1,qa_user_v1,configs/experiments/full.json,"
                             "abc123,run-1,run-1,17,0.9,True,0.0,False"
                         ),
@@ -255,13 +259,17 @@ class PipelineNormalizationTests(unittest.TestCase):
                     [
                         (
                             "workflow_variant,question_set_label,model_id,embedding_model_id,retrieval_mode,retrieval_top_k,"
-                            "retrieval_filter_logic,draft_system_prompt_id,draft_user_prompt_id,qa_system_prompt_ids,"
+                            "retrieval_filter_logic,retrieval_filter_logic_config,retrieval_filter_logic_effective,"
+                            "draft_retrieval_filter_logic_effective,qa_retrieval_filter_logic_effective,"
+                            "draft_retrieval_strategy_effective,qa_retrieval_strategy_effective,"
+                            "draft_system_prompt_id,draft_user_prompt_id,qa_system_prompt_ids,"
                             "qa_user_prompt_ids,config_path,git_commit_hash,corpus_version,index_version,random_seed,"
                             "draft_required_element_coverage_ratio,draft_study_specific_grounding_met,qa_abstention_rate,"
                             "failure_missing_selected_study_grounding"
                         ),
                         (
-                            "generic_rag,study_specific_basics,Qwen/Qwen3-8B,BAAI/bge-small-en-v1.5,hybrid,6,union,"
+                            "generic_rag,study_specific_basics,Qwen/Qwen3-8B,BAAI/bge-small-en-v1.5,hybrid,6,union,union,intersection,"
+                            "intersection,intersection,single_pass,single_pass,"
                             "draft_system_v1,draft_user_v1,qa_system_v1,qa_user_v1,configs/experiments/generic.json,"
                             "abc123,run-1,run-1,17,0.7,False,0.2,True"
                         ),
@@ -285,6 +293,12 @@ class PipelineNormalizationTests(unittest.TestCase):
                         "retrieval_modes": ["hybrid"],
                         "retrieval_top_k_values": [6],
                         "retrieval_filter_logics": ["union"],
+                        "retrieval_filter_logic_configs": ["union"],
+                        "retrieval_filter_logic_effective_values": ["intersection"],
+                        "draft_retrieval_filter_logic_effective_values": ["intersection"],
+                        "qa_retrieval_filter_logic_effective_values": ["intersection"],
+                        "draft_retrieval_strategy_effective_values": ["study_plus_regulatory_split"],
+                        "qa_retrieval_strategy_effective_values": ["study_plus_regulatory_split"],
                         "draft_system_prompt_ids": ["draft_system_v1"],
                         "draft_user_prompt_ids": ["draft_user_v1"],
                         "formalization_system_prompt_ids": ["formalization_system_v1"],
@@ -323,6 +337,12 @@ class PipelineNormalizationTests(unittest.TestCase):
                         "retrieval_modes": ["hybrid"],
                         "retrieval_top_k_values": [6],
                         "retrieval_filter_logics": ["union"],
+                        "retrieval_filter_logic_configs": ["union"],
+                        "retrieval_filter_logic_effective_values": ["intersection"],
+                        "draft_retrieval_filter_logic_effective_values": ["intersection"],
+                        "qa_retrieval_filter_logic_effective_values": ["intersection"],
+                        "draft_retrieval_strategy_effective_values": ["single_pass"],
+                        "qa_retrieval_strategy_effective_values": ["single_pass"],
                         "draft_system_prompt_ids": ["draft_system_v1"],
                         "draft_user_prompt_ids": ["draft_user_v1"],
                         "formalization_system_prompt_ids": ["formalization_system_v1"],
@@ -363,6 +383,8 @@ class PipelineNormalizationTests(unittest.TestCase):
                 comparison_rows = list(csv.DictReader(handle))
             self.assertEqual(comparison_rows[0]["model_id"], "Qwen/Qwen3-8B")
             self.assertEqual(comparison_rows[0]["workflow_variants"], "full_agentic")
+            self.assertEqual(comparison_rows[0]["retrieval_filter_logic_configs"], "union")
+            self.assertEqual(comparison_rows[0]["retrieval_filter_logic_effective_values"], "intersection")
 
             with Path(payload["grouped_comparison_csv"]).open("r", encoding="utf-8", newline="") as handle:
                 grouped_rows = list(csv.DictReader(handle))
@@ -370,6 +392,9 @@ class PipelineNormalizationTests(unittest.TestCase):
             self.assertEqual(grouped_rows[0]["question_set_label"], "study_specific_basics")
             self.assertEqual(grouped_rows[0]["retrieval_mode"], "hybrid")
             self.assertEqual(grouped_rows[0]["draft_system_prompt_id"], "draft_system_v1")
+            self.assertEqual(grouped_rows[0]["retrieval_filter_logic_config"], "union")
+            self.assertEqual(grouped_rows[0]["retrieval_filter_logic_effective"], "intersection")
+            self.assertEqual(grouped_rows[0]["draft_retrieval_strategy_effective"], "study_plus_regulatory_split")
 
             with Path(payload["overall_workflow_csv"]).open("r", encoding="utf-8", newline="") as handle:
                 workflow_rows = list(csv.DictReader(handle))
@@ -470,6 +495,12 @@ class PipelineNormalizationTests(unittest.TestCase):
                     "index_version": base_run_id,
                     "random_seed": 17,
                     "retrieval_top_k": 6,
+                    "retrieval_filter_logic": "union",
+                    "retrieval_filter_logic_config": "union",
+                    "draft_retrieval_filter_logic_effective": "intersection",
+                    "qa_retrieval_filter_logic_effective": ["intersection"],
+                    "draft_retrieval_strategy_effective": "no_retrieval",
+                    "qa_retrieval_strategy_effective": ["no_retrieval"],
                     "draft_system_prompt_id": "draft_system_v1",
                     "draft_user_prompt_id": "draft_user_v1",
                     "formalization_system_prompt_id": "formalization_system_v1",
@@ -624,6 +655,12 @@ class PipelineNormalizationTests(unittest.TestCase):
             self.assertEqual(rows[0]["workflow_variant"], "vanilla_llm")
             self.assertEqual(rows[0]["retrieval_mode"], "none")
             self.assertEqual(rows[0]["question_set_label"], "study_specific_basics")
+            self.assertEqual(rows[0]["retrieval_filter_logic_config"], "union")
+            self.assertEqual(rows[0]["retrieval_filter_logic_effective"], "union")
+            self.assertEqual(rows[0]["draft_retrieval_filter_logic_effective"], "intersection")
+            self.assertEqual(rows[0]["qa_retrieval_filter_logic_effective"], "intersection")
+            self.assertEqual(rows[0]["draft_retrieval_strategy_effective"], "no_retrieval")
+            self.assertEqual(rows[0]["qa_retrieval_strategy_effective"], "no_retrieval")
             self.assertIn("failure_unsupported_claim_risk", rows[0])
             self.assertIn("draft_selected_study_hit_present", rows[0])
 

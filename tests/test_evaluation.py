@@ -214,6 +214,22 @@ class EvaluationOutputTests(unittest.TestCase):
             run_dir = Path(temp_dir)
             (run_dir / "inputs").mkdir(parents=True, exist_ok=True)
             (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
+            (run_dir / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "study_id": "NCT03877237",
+                        "site_id": "PUBLIC-SOURCE",
+                        "context_metadata": {
+                            "study_source_id": "nct03877237",
+                            "workflow_variant": "full_agentic",
+                            "patient_profile_label": "example_us_medium_literacy",
+                            "question_set_label": "study_specific_basics",
+                            "retrieval_filter_logic": "union",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
             (run_dir / "inputs" / "patient_profile.json").write_text(
                 json.dumps(
                     {
@@ -242,6 +258,7 @@ class EvaluationOutputTests(unittest.TestCase):
                         "workflow_variant": "full_agentic",
                         "source_group_filters": ["regulatory_guidance", "trial_materials"],
                         "source_id_filters": ["nct03877237"],
+                        "filter_logic_used": "union",
                     }
                 ),
                 encoding="utf-8",
@@ -264,6 +281,9 @@ class EvaluationOutputTests(unittest.TestCase):
         self.assertTrue(summary["draft"]["expected_study_specific_grounding"])
         self.assertFalse(summary["draft"]["study_specific_grounding_met"])
         self.assertTrue(summary["draft"]["study_specific_grounding_gap"])
+        self.assertEqual(summary["metadata"]["retrieval_filter_logic_config"], "union")
+        self.assertEqual(summary["metadata"]["draft_retrieval_filter_logic_effective"], "union")
+        self.assertEqual(summary["metadata"]["draft_retrieval_strategy_effective"], "single_pass")
 
     def test_evaluate_run_outputs_detects_foreign_study_contamination_and_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -324,6 +344,7 @@ class EvaluationOutputTests(unittest.TestCase):
                         "workflow_variant": "generic_rag",
                         "source_group_filters": ["regulatory_guidance", "trial_materials"],
                         "source_id_filters": ["nct03877237"],
+                        "filter_logic_used": "union",
                         "system_prompt_id": "draft_system_v1",
                         "user_prompt_id": "draft_user_v1",
                     }
@@ -363,6 +384,9 @@ class EvaluationOutputTests(unittest.TestCase):
 
         self.assertEqual(summary["metadata"]["question_set_label"], "study_specific_basics")
         self.assertEqual(summary["metadata"]["draft_system_prompt_id"], "draft_system_v1")
+        self.assertEqual(summary["metadata"]["retrieval_filter_logic_config"], "union")
+        self.assertEqual(summary["metadata"]["draft_retrieval_filter_logic_effective"], "union")
+        self.assertEqual(summary["metadata"]["draft_retrieval_strategy_effective"], "single_pass")
         self.assertTrue(summary["draft"]["selected_study_hit_present"])
         self.assertTrue(summary["draft"]["foreign_study_hit_present"])
         self.assertEqual(summary["draft"]["regulatory_hit_count"], 1)
@@ -432,6 +456,7 @@ class EvaluationOutputTests(unittest.TestCase):
                     {
                         "source_group_filters": ["regulatory_guidance", "trial_materials"],
                         "source_id_filters": ["nct03877237"],
+                        "filter_logic_used": "union",
                         "system_prompt_id": "qa_system_v1",
                         "user_prompt_id": "qa_user_v1",
                     }
@@ -480,6 +505,8 @@ class EvaluationOutputTests(unittest.TestCase):
             summary = evaluate_run_outputs("run-qa-risk", run_dir)["summary"]
 
         self.assertEqual(summary["qa_answers"]["answered_count"], 1)
+        self.assertEqual(summary["metadata"]["qa_retrieval_filter_logic_effective"], ["union"])
+        self.assertEqual(summary["metadata"]["qa_retrieval_strategy_effective"], ["single_pass"])
         self.assertEqual(summary["qa_answers"]["selected_study_hit_count"], 0)
         self.assertTrue(summary["qa_answers"]["study_specific_grounding_gap"])
         self.assertGreater(summary["qa_answers"]["citationless_sentence_count"], 0)
