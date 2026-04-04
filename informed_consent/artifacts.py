@@ -107,6 +107,17 @@ class ArtifactStore:
     def run_path(self, run_id: str, *parts: str) -> Path:
         return self.runs_dir / run_id / Path(*parts)
 
+    def update_run_manifest(self, run_id: str, updates: dict[str, Any]) -> dict[str, Any]:
+        manifest_path = self.run_path(run_id, "manifest.json")
+        if not manifest_path.exists():
+            raise FileNotFoundError(f"Run manifest does not exist: {manifest_path}")
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise RuntimeError(f"Run manifest is not a JSON object: {manifest_path}")
+        payload.update(serialize_value(updates))
+        self.write_json(manifest_path, payload)
+        return payload
+
     def write_json(self, path: Path, payload: Any) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(serialize_value(payload), indent=2), encoding="utf-8")

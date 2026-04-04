@@ -11,6 +11,10 @@ from .types import EvaluationRecord
 
 WORD_PATTERN = re.compile(r"[A-Za-z0-9]+(?:'[A-Za-z0-9]+)?")
 CITATION_PATTERN = re.compile(r"\[\d+\]")
+UNCERTAINTY_PATTERN = re.compile(
+    r"\b(insufficient|uncertain|not enough|not specified|not provided|not available|cannot tell|can't tell|do not know|unknown|not supported)\b",
+    re.IGNORECASE,
+)
 
 DRAFT_REQUIRED_ELEMENT_THRESHOLD = 0.7
 DRAFT_SENTENCE_CITATION_THRESHOLD = 0.5
@@ -161,6 +165,177 @@ def sentence_citation_metrics(text: str) -> dict[str, float]:
     }
 
 
+def sentence_support_diagnostics(
+    text: str,
+    *,
+    unsupported_markers: list[str] | None = None,
+    missing_required_evidence: bool = False,
+) -> dict[str, float]:
+    sentences = split_sentences(text)
+    if not sentences:
+        return {
+            "sentence_count": 0.0,
+            "citationless_sentence_count": 0.0,
+            "citationless_sentence_rate": 0.0,
+            "unsupported_sentence_count": 0.0,
+        }
+
+    unsupported_marker_set = set(unsupported_markers or [])
+    citationless_sentence_count = 0
+    unsupported_sentence_count = 0
+    for sentence in sentences:
+        sentence_markers = set(extract_citation_markers(sentence))
+        sentence_has_unsupported_marker = bool(sentence_markers & unsupported_marker_set)
+        if not sentence_markers:
+            citationless_sentence_count += 1
+        if sentence_has_unsupported_marker:
+            unsupported_sentence_count += 1
+            continue
+        if not sentence_markers and missing_required_evidence and not UNCERTAINTY_PATTERN.search(sentence):
+            unsupported_sentence_count += 1
+
+    return {
+        "sentence_count": float(len(sentences)),
+        "citationless_sentence_count": float(citationless_sentence_count),
+        "citationless_sentence_rate": round(citationless_sentence_count / len(sentences), 4),
+        "unsupported_sentence_count": float(unsupported_sentence_count),
+    }
+
+
+def normalize_source_id_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    normalized: list[str] = []
+    for item in value:
+        source_id = str(item or "").strip().lower()
+        if source_id:
+            normalized.append(source_id)
+    return list(dict.fromkeys(normalized))
+
+
+def normalize_prompt_identifiers(bundle: dict[str, Any]) -> dict[str, Any]:
+    prompt_identifiers = bundle.get("prompt_identifiers", {})
+    if not isinstance(prompt_identifiers, dict):
+        prompt_identifiers = {}
+    system_prompt_id = str(
+        prompt_identifiers.get("system_prompt_id")
+        or bundle.get("system_prompt_id")
+        or Path(str(bundle.get("system_prompt_path", "")).strip()).name
+    ).strip()
+    user_prompt_id = str(
+        prompt_identifiers.get("user_prompt_id")
+        or bundle.get("user_prompt_id")
+        or Path(str(bundle.get("user_prompt_path", "")).strip()).name
+    ).strip()
+    return {
+        "system_prompt_id": system_prompt_id or None,
+        "user_prompt_id": user_prompt_id or None,
+        "system_prompt_path": str(
+            prompt_identifiers.get("system_prompt_path") or bundle.get("system_prompt_path") or ""
+        ).strip()
+        or None,
+        "user_prompt_path": str(
+            prompt_identifiers.get("user_prompt_path") or bundle.get("user_prompt_path") or ""
+        ).strip()
+        or None,
+    }
+
+
+def merge_prompt_identifier_sets(items: list[dict[str, Any]]) -> dict[str, list[str]]:
+    merged = {
+        "system_prompt_ids": [],
+        "user_prompt_ids": [],
+        "system_prompt_paths": [],
+        "user_prompt_paths": [],
+    }
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        for source_key, target_key in (
+            ("system_prompt_id", "system_prompt_ids"),
+            ("user_prompt_id", "user_prompt_ids"),
+            ("system_prompt_path", "system_prompt_paths"),
+            ("user_prompt_path", "user_prompt_paths"),
+        ):
+            value = str(item.get(source_key) or "").strip()
+            if value and value not in merged[target_key]:
+                merged[target_key].append(value)
+    return merged
+
+
+def explicit_grounding_gap_declared(text: str, *, limitations: list[str] | None = None) -> bool:
+    if isinstance(limitations, list) and any(str(item).strip() for item in limitations):
+        return True
+    return bool(UNCERTAINTY_PATTERN.search(text))
+
+
+def compute_grounding_diagnostics(
+    retrieval_hits: list[dict[str, Any]],
+    *,
+    selected_source_ids: list[str] | None = None,
+    expected_study_specific_grounding: bool = False,
+) -> dict[str, Any]:
+    selected_ids = set(normalize_source_id_list(selected_source_ids or []))
+    grounding_source_ids_used: list[str] = []
+    foreign_source_ids_detected: list[str] = []
+    selected_study_hit_count = 0
+    foreign_study_hit_count = 0
+    regulatory_hit_count = 0
+    other_hit_count = 0
+
+    for hit in retrieval_hits:
+        if not isinstance(hit, dict):
+            continue
+        source_id = str(hit.get("source_id") or "").strip().lower()
+        metadata = hit.get("metadata", {})
+        if not isinstance(metadata, dict):
+            metadata = {}
+        source_group = str(metadata.get("source_group") or metadata.get("group_id") or "").strip().lower()
+        if source_id and source_id not in grounding_source_ids_used:
+            grounding_source_ids_used.append(source_id)
+        if source_group == "regulatory_guidance":
+            regulatory_hit_count += 1
+            continue
+        if source_group == "trial_materials":
+            if selected_ids and source_id in selected_ids:
+                selected_study_hit_count += 1
+            elif selected_ids and source_id:
+                foreign_study_hit_count += 1
+                if source_id not in foreign_source_ids_detected:
+                    foreign_source_ids_detected.append(source_id)
+            else:
+                other_hit_count += 1
+            continue
+        other_hit_count += 1
+
+    total_hit_count = len(retrieval_hits)
+    selected_study_hit_present = selected_study_hit_count > 0
+    foreign_study_hit_present = foreign_study_hit_count > 0
+    regulatory_hit_present = regulatory_hit_count > 0
+    study_specific_grounding_met = (not expected_study_specific_grounding) or selected_study_hit_present
+    study_specific_grounding_gap = expected_study_specific_grounding and not selected_study_hit_present
+    regulatory_only_grounding = regulatory_hit_present and not selected_study_hit_present and not foreign_study_hit_present
+
+    return {
+        "selected_study_source_ids": sorted(selected_ids),
+        "selected_study_hit_count": selected_study_hit_count,
+        "selected_study_hit_present": selected_study_hit_present,
+        "foreign_study_hit_count": foreign_study_hit_count,
+        "foreign_study_hit_present": foreign_study_hit_present,
+        "regulatory_hit_count": regulatory_hit_count,
+        "regulatory_hit_present": regulatory_hit_present,
+        "other_hit_count": other_hit_count,
+        "total_hit_count": total_hit_count,
+        "study_specific_hit_count": selected_study_hit_count + foreign_study_hit_count,
+        "study_specific_hit_present": (selected_study_hit_count + foreign_study_hit_count) > 0,
+        "study_specific_grounding_met": study_specific_grounding_met,
+        "study_specific_grounding_gap": study_specific_grounding_gap,
+        "regulatory_only_grounding": regulatory_only_grounding,
+        "grounding_source_ids_used": grounding_source_ids_used,
+        "foreign_source_ids_detected": foreign_source_ids_detected,
+    }
+
+
 def estimate_syllables(word: str) -> int:
     cleaned = re.sub(r"[^a-z]", "", word.lower())
     if not cleaned:
@@ -239,10 +414,13 @@ def summarize_personalized_draft(
     unsupported_markers = sorted(set(inline_markers) - set(available_markers))
     unsupported_summary_markers = sorted(set(summary_inline_markers) - set(available_markers))
     required_elements = evaluate_required_elements(text)
+    missing_required_elements = [name for name, present in required_elements.items() if not present]
     readability = readability_metrics(text)
     summary_readability = readability_metrics(summary_text)
     citation_sentence_metrics = sentence_citation_metrics(text)
     summary_citation_sentence_metrics = sentence_citation_metrics(summary_text)
+    support_diagnostics = sentence_support_diagnostics(text, unsupported_markers=unsupported_markers)
+    summary_support_diagnostics = sentence_support_diagnostics(summary_text, unsupported_markers=unsupported_summary_markers)
     draft_grade_threshold = target_grade_threshold(health_literacy, artifact_type="draft")
     summary_grade_threshold = target_grade_threshold(health_literacy, artifact_type="summary")
     repair_notes = draft.get("schema_repair_notes", [])
@@ -259,9 +437,11 @@ def summarize_personalized_draft(
         "summary_identical_to_full_text": bool(text and summary_text and text == summary_text),
         "stored_citation_marker_count": len(stored_markers),
         "inline_citation_marker_count": len(inline_markers),
+        "unsupported_marker_count": len(unsupported_markers),
         "unsupported_inline_citation_marker_count": len(unsupported_markers),
         "summary_stored_citation_marker_count": len(summary_markers),
         "summary_inline_citation_marker_count": len(summary_inline_markers),
+        "summary_unsupported_marker_count": len(unsupported_summary_markers),
         "unsupported_summary_citation_marker_count": len(unsupported_summary_markers),
         "citation_marker_coverage_ratio": round(
             len(set(inline_markers)) / max(len(available_markers), 1),
@@ -276,6 +456,8 @@ def summarize_personalized_draft(
             sum(1 for value in required_elements.values() if value) / len(required_elements),
             4,
         ) if required_elements else 0.0,
+        "missing_required_element_count": len(missing_required_elements),
+        "missing_required_elements": missing_required_elements,
         "target_health_literacy": health_literacy,
         "draft_grade_threshold": draft_grade_threshold,
         "draft_grade_target_met": readability["flesch_kincaid_grade"] <= draft_grade_threshold,
@@ -294,9 +476,19 @@ def summarize_personalized_draft(
         "sentence_with_citation_count": citation_sentence_metrics["sentence_with_citation_count"],
         "sentence_without_citation_count": citation_sentence_metrics["sentence_without_citation_count"],
         "sentence_citation_coverage_ratio": citation_sentence_metrics["sentence_citation_coverage_ratio"],
+        "citationless_sentence_count": support_diagnostics["citationless_sentence_count"],
+        "citationless_sentence_rate": support_diagnostics["citationless_sentence_rate"],
+        "unsupported_sentence_count": support_diagnostics["unsupported_sentence_count"],
         "summary_sentence_with_citation_count": summary_citation_sentence_metrics["sentence_with_citation_count"],
         "summary_sentence_without_citation_count": summary_citation_sentence_metrics["sentence_without_citation_count"],
         "summary_sentence_citation_coverage_ratio": summary_citation_sentence_metrics["sentence_citation_coverage_ratio"],
+        "summary_citationless_sentence_count": summary_support_diagnostics["citationless_sentence_count"],
+        "summary_citationless_sentence_rate": summary_support_diagnostics["citationless_sentence_rate"],
+        "summary_unsupported_sentence_count": summary_support_diagnostics["unsupported_sentence_count"],
+        "grounding_gap_declared": explicit_grounding_gap_declared(
+            f"{summary_text}\n{text}",
+            limitations=draft.get("grounding_limitations") if isinstance(draft.get("grounding_limitations"), list) else [],
+        ),
     }
 
 
@@ -512,9 +704,12 @@ def build_evaluation_records(
     metric_group: str,
     case_id: str,
     metrics: dict[str, Any],
+    metadata: dict[str, Any] | None = None,
 ) -> list[EvaluationRecord]:
     records: list[EvaluationRecord] = []
     for metric_name, metric_value in metrics.items():
+        if isinstance(metric_value, (dict, list, tuple, set)):
+            continue
         records.append(
             EvaluationRecord(
                 run_id=run_id,
@@ -522,6 +717,7 @@ def build_evaluation_records(
                 metric_name=metric_name,
                 metric_value=metric_value,
                 metric_group=metric_group,
+                metadata=metadata or {},
             )
         )
     return records
@@ -532,16 +728,108 @@ def evaluate_run_outputs(run_id: str, run_dir: Path) -> dict[str, Any]:
     evaluation_records: list[EvaluationRecord] = []
     patient_profile = load_patient_profile_if_available(run_dir)
     health_literacy = str(patient_profile.get("health_literacy", "medium"))
+    manifest_payload = load_json(run_dir / "manifest.json") if (run_dir / "manifest.json").exists() else {}
+    if not isinstance(manifest_payload, dict):
+        manifest_payload = {}
+    runtime_metadata = manifest_payload.get("runtime_metadata", {})
+    if not isinstance(runtime_metadata, dict):
+        runtime_metadata = {}
+    context_metadata = manifest_payload.get("context_metadata", {})
+    if not isinstance(context_metadata, dict):
+        context_metadata = {}
 
     retrieval_hits = load_json(outputs_dir / "personalization_retrieval_hits.json") if (outputs_dir / "personalization_retrieval_hits.json").exists() else []
+    if not isinstance(retrieval_hits, list):
+        retrieval_hits = []
     available_markers = [f"[{idx}]" for idx in range(1, len(retrieval_hits) + 1)]
+    draft_request_bundle = load_json(outputs_dir / "personalization_request_bundle.json") if (outputs_dir / "personalization_request_bundle.json").exists() else {}
+    if not isinstance(draft_request_bundle, dict):
+        draft_request_bundle = {}
+    formalization_request_bundle = load_json(outputs_dir / "formalization_request_bundle.json") if (outputs_dir / "formalization_request_bundle.json").exists() else {}
+    if not isinstance(formalization_request_bundle, dict):
+        formalization_request_bundle = {}
+    qa_dir = outputs_dir / "qa"
+    qa_index_path = qa_dir / "qa_index.jsonl"
+    qa_index_rows = deduplicate_qa_index_rows(load_jsonl(qa_index_path))
+    qa_prompt_identifiers = merge_prompt_identifier_sets(
+        [
+            normalize_prompt_identifiers(payload)
+            for payload in (
+                load_json(Path(str(row.get("request_bundle_path"))))
+                for row in qa_index_rows
+                if row.get("request_bundle_path") and Path(str(row.get("request_bundle_path"))).exists()
+            )
+            if isinstance(payload, dict)
+        ]
+    )
+    draft_prompt_identifiers = normalize_prompt_identifiers(draft_request_bundle) if draft_request_bundle else {}
+    formalization_prompt_identifiers = normalize_prompt_identifiers(formalization_request_bundle) if formalization_request_bundle else {}
+    summary_metadata = {
+        "run_id": run_id,
+        "study_id": str(manifest_payload.get("study_id") or "").strip() or None,
+        "site_id": str(manifest_payload.get("site_id") or "").strip() or None,
+        "study_source_id": str(context_metadata.get("study_source_id") or "").strip() or None,
+        "workflow_variant": str(
+            draft_request_bundle.get("workflow_variant")
+            or context_metadata.get("workflow_variant")
+            or ""
+        ).strip() or None,
+        "patient_profile_label": str(context_metadata.get("patient_profile_label") or "").strip() or None,
+        "question_set_label": str(context_metadata.get("question_set_label") or "").strip() or None,
+        "model_id": str(
+            draft_request_bundle.get("model_id")
+            or formalization_request_bundle.get("model_id")
+            or runtime_metadata.get("model_id")
+            or ""
+        ).strip() or None,
+        "embedding_model_id": str(
+            draft_request_bundle.get("embedding_model_id")
+            or formalization_request_bundle.get("embedding_model_id")
+            or runtime_metadata.get("embedding_model_id")
+            or ""
+        ).strip() or None,
+        "retrieval_mode": str(
+            draft_request_bundle.get("retrieval_mode_used")
+            or context_metadata.get("retrieval_mode")
+            or runtime_metadata.get("retrieval_default_mode")
+            or ""
+        ).strip() or None,
+        "retrieval_top_k": draft_request_bundle.get("top_k") or context_metadata.get("retrieval_top_k") or runtime_metadata.get("retrieval_default_top_k"),
+        "retrieval_filter_logic": str(
+            draft_request_bundle.get("filter_logic_used")
+            or context_metadata.get("retrieval_filter_logic")
+            or ""
+        ).strip() or None,
+        "config_path": str(context_metadata.get("config_path") or runtime_metadata.get("config_path") or "").strip() or None,
+        "git_commit_hash": str(runtime_metadata.get("git_commit_hash") or "").strip() or None,
+        "corpus_version": str(context_metadata.get("base_run_id") or runtime_metadata.get("corpus_version") or "").strip() or None,
+        "index_version": str(runtime_metadata.get("index_version") or "").strip() or None,
+        "base_run_id": str(context_metadata.get("base_run_id") or "").strip() or None,
+        "batch_run_id": str(context_metadata.get("batch_run_id") or "").strip() or None,
+        "batch_id": str(context_metadata.get("batch_id") or "").strip() or None,
+        "reporting_role": str(context_metadata.get("reporting_role") or "").strip() or None,
+        "random_seed": runtime_metadata.get("random_seed"),
+        "draft_system_prompt_id": draft_prompt_identifiers.get("system_prompt_id"),
+        "draft_user_prompt_id": draft_prompt_identifiers.get("user_prompt_id"),
+        "formalization_system_prompt_id": formalization_prompt_identifiers.get("system_prompt_id"),
+        "formalization_user_prompt_id": formalization_prompt_identifiers.get("user_prompt_id"),
+        "qa_system_prompt_ids": qa_prompt_identifiers.get("system_prompt_ids", []),
+        "qa_user_prompt_ids": qa_prompt_identifiers.get("user_prompt_ids", []),
+        "prompt_identifiers": {
+            "draft": draft_prompt_identifiers,
+            "formalization": formalization_prompt_identifiers,
+            "qa": qa_prompt_identifiers,
+        },
+    }
 
     summary: dict[str, Any] = {
         "run_id": run_id,
         "available_citation_markers": available_markers,
+        "metadata": summary_metadata,
         "draft": {},
         "structured_record": {},
         "qa_answers": {},
+        "failure_taxonomy": {},
     }
 
     draft_path = outputs_dir / "personalized_consent_draft.json"
@@ -552,42 +840,53 @@ def evaluate_run_outputs(run_id: str, run_dir: Path) -> dict[str, Any]:
             available_markers=available_markers,
             health_literacy=health_literacy,
         )
-        request_bundle_path = outputs_dir / "personalization_request_bundle.json"
-        expected_study_specific_grounding = False
-        has_study_specific_evidence = False
-        if request_bundle_path.exists():
-            request_bundle = load_json(request_bundle_path)
-            source_group_filters = request_bundle.get("source_group_filters", [])
-            if not isinstance(source_group_filters, list):
-                source_group_filters = []
-            source_group_filters = [str(item) for item in source_group_filters]
-            source_id_filters = request_bundle.get("source_id_filters", [])
-            if not isinstance(source_id_filters, list):
-                source_id_filters = []
-            source_id_filters = [str(item) for item in source_id_filters]
-            draft_summary["workflow_variant"] = str(request_bundle.get("workflow_variant", "full_agentic")).strip() or "full_agentic"
-            expected_study_specific_grounding = bool(source_id_filters) or ("trial_materials" in source_group_filters)
-            draft_summary["expected_study_specific_grounding"] = expected_study_specific_grounding
-
-        evidence_package_path = outputs_dir / "personalization_evidence_package.json"
-        if evidence_package_path.exists():
-            evidence_package = load_json(evidence_package_path)
-            role_counts = evidence_package.get("role_counts", {})
-            if not isinstance(role_counts, dict):
-                role_counts = {}
-            study_specific_hit_count = int(role_counts.get("study_specific", 0) or 0)
-            regulatory_hit_count = int(role_counts.get("regulatory", 0) or 0)
-            other_hit_count = int(role_counts.get("other", 0) or 0)
-            total_role_hits = max(study_specific_hit_count + regulatory_hit_count + other_hit_count, 1)
-            draft_summary["study_specific_hit_count"] = study_specific_hit_count
-            draft_summary["regulatory_hit_count"] = regulatory_hit_count
-            draft_summary["other_hit_count"] = other_hit_count
-            has_study_specific_evidence = study_specific_hit_count > 0
-            draft_summary["has_study_specific_evidence"] = has_study_specific_evidence
-            draft_summary["study_specific_hit_ratio"] = round(study_specific_hit_count / total_role_hits, 4)
+        source_group_filters = draft_request_bundle.get("source_group_filters", [])
+        if not isinstance(source_group_filters, list):
+            source_group_filters = []
+        source_group_filters = [str(item).strip().lower() for item in source_group_filters if str(item).strip()]
+        source_id_filters = normalize_source_id_list(draft_request_bundle.get("source_id_filters", []))
+        expected_study_specific_grounding = bool(source_id_filters) or ("trial_materials" in source_group_filters)
+        draft_grounding = compute_grounding_diagnostics(
+            retrieval_hits,
+            selected_source_ids=source_id_filters,
+            expected_study_specific_grounding=expected_study_specific_grounding,
+        )
+        draft_support_diagnostics = sentence_support_diagnostics(
+            str(draft.get("personalized_consent_text", "")).strip(),
+            unsupported_markers=[
+                marker
+                for marker in extract_citation_markers(str(draft.get("personalized_consent_text", "")).strip())
+                if marker not in set(available_markers)
+            ],
+            missing_required_evidence=draft_grounding["study_specific_grounding_gap"] and not draft_summary.get("grounding_gap_declared"),
+        )
+        draft_summary.update(draft_grounding)
+        draft_summary["workflow_variant"] = summary_metadata.get("workflow_variant") or "full_agentic"
         draft_summary["expected_study_specific_grounding"] = expected_study_specific_grounding
-        draft_summary["study_specific_grounding_met"] = (not expected_study_specific_grounding) or has_study_specific_evidence
-        draft_summary["study_specific_grounding_gap"] = expected_study_specific_grounding and not has_study_specific_evidence
+        draft_summary["has_study_specific_evidence"] = draft_grounding["selected_study_hit_present"]
+        draft_summary["study_specific_hit_ratio"] = round(
+            draft_grounding["study_specific_hit_count"] / max(draft_grounding["total_hit_count"], 1),
+            4,
+        ) if draft_grounding["total_hit_count"] else 0.0
+        draft_summary["grounding_source_ids_used_count"] = len(draft_grounding["grounding_source_ids_used"])
+        draft_summary["citationless_sentence_count"] = draft_support_diagnostics["citationless_sentence_count"]
+        draft_summary["citationless_sentence_rate"] = draft_support_diagnostics["citationless_sentence_rate"]
+        draft_summary["unsupported_sentence_count"] = draft_support_diagnostics["unsupported_sentence_count"]
+        draft_summary["unsupported_claim_risk"] = bool(
+            draft_summary.get("unsupported_marker_count", 0)
+            or draft_summary.get("unsupported_sentence_count", 0)
+            or (draft_grounding["study_specific_grounding_gap"] and not draft_summary.get("grounding_gap_declared"))
+        )
+        draft_summary["failure_flags"] = {
+            "missing_selected_study_grounding": bool(draft_grounding["study_specific_grounding_gap"]),
+            "foreign_study_contamination": bool(draft_grounding["foreign_study_hit_present"]),
+            "regulatory_only_grounding": bool(draft_grounding["regulatory_only_grounding"]),
+            "unsupported_claim_risk": bool(draft_summary["unsupported_claim_risk"]),
+            "omitted_required_element": bool(draft_summary.get("missing_required_element_count", 0)),
+            "overconfident_answer": False,
+            "malformed_structured_output": False,
+            "grounding_gap_declared": bool(draft_summary.get("grounding_gap_declared")),
+        }
         summary["draft"] = draft_summary
         evaluation_records.extend(
             build_evaluation_records(
@@ -595,10 +894,23 @@ def evaluate_run_outputs(run_id: str, run_dir: Path) -> dict[str, Any]:
                 metric_group="draft",
                 case_id="personalized_consent_draft",
                 metrics=draft_summary,
+                metadata=summary_metadata,
             )
         )
     else:
-        summary["draft"] = {"artifact_present": False}
+        summary["draft"] = {
+            "artifact_present": False,
+            "failure_flags": {
+                "missing_selected_study_grounding": False,
+                "foreign_study_contamination": False,
+                "regulatory_only_grounding": False,
+                "unsupported_claim_risk": False,
+                "omitted_required_element": False,
+                "overconfident_answer": False,
+                "malformed_structured_output": False,
+                "grounding_gap_declared": False,
+            },
+        }
 
     structured_path = outputs_dir / "structured_consent_record.json"
     if structured_path.exists():
@@ -647,6 +959,19 @@ def evaluate_run_outputs(run_id: str, run_dir: Path) -> dict[str, Any]:
             "consent_summary_present": has_nonempty_text(structured.get("consent_summary")),
             "schema_repair_applied": bool(metadata.get("schema_repair_notes")),
         }
+        structured_summary["malformed_structured_output"] = bool(
+            structured_summary["schema_repair_applied"] or structured_summary["missing_field_count"] > 0
+        )
+        structured_summary["failure_flags"] = {
+            "missing_selected_study_grounding": False,
+            "foreign_study_contamination": False,
+            "regulatory_only_grounding": False,
+            "unsupported_claim_risk": False,
+            "omitted_required_element": False,
+            "overconfident_answer": False,
+            "malformed_structured_output": bool(structured_summary["malformed_structured_output"]),
+            "grounding_gap_declared": False,
+        }
         summary["structured_record"] = {
             **structured_summary,
             "missing_fields": missing_fields,
@@ -657,21 +982,116 @@ def evaluate_run_outputs(run_id: str, run_dir: Path) -> dict[str, Any]:
                 metric_group="structured_record",
                 case_id="structured_consent_record",
                 metrics=structured_summary,
+                metadata=summary_metadata,
             )
         )
     else:
-        summary["structured_record"] = {"artifact_present": False}
+        summary["structured_record"] = {
+            "artifact_present": False,
+            "failure_flags": {
+                "missing_selected_study_grounding": False,
+                "foreign_study_contamination": False,
+                "regulatory_only_grounding": False,
+                "unsupported_claim_risk": False,
+                "omitted_required_element": False,
+                "overconfident_answer": False,
+                "malformed_structured_output": False,
+                "grounding_gap_declared": False,
+            },
+        }
 
-    qa_dir = outputs_dir / "qa"
-    qa_index_path = qa_dir / "qa_index.jsonl"
-    qa_index_rows = deduplicate_qa_index_rows(load_jsonl(qa_index_path))
     qa_answer_summaries: list[dict[str, Any]] = []
     if qa_index_rows:
         abstained_question_count = 0
+        clarified_question_count = 0
         for row in qa_index_rows:
+            question_id = str(row.get("question_id", "")).strip()
+            question = str(row.get("question", "")).strip()
+            qa_request_bundle: dict[str, Any] = {}
+            request_path_raw = row.get("request_bundle_path")
+            if request_path_raw:
+                request_path = Path(str(request_path_raw))
+                if request_path.exists():
+                    payload = load_json(request_path)
+                    if isinstance(payload, dict):
+                        qa_request_bundle = payload
+            qa_source_group_filters = qa_request_bundle.get("source_group_filters", [])
+            if not isinstance(qa_source_group_filters, list):
+                qa_source_group_filters = []
+            qa_source_group_filters = [str(item).strip().lower() for item in qa_source_group_filters if str(item).strip()]
+            qa_source_id_filters = normalize_source_id_list(qa_request_bundle.get("source_id_filters", []))
+            qa_expected_study_specific_grounding = bool(qa_source_id_filters) or ("trial_materials" in qa_source_group_filters)
+            question_retrieval_hits: list[dict[str, Any]] = []
+            retrieval_hits_path_raw = row.get("retrieval_hits_path")
+            if retrieval_hits_path_raw:
+                retrieval_hits_path = Path(str(retrieval_hits_path_raw))
+                if retrieval_hits_path.exists():
+                    payload = load_json(retrieval_hits_path)
+                    if isinstance(payload, list):
+                        question_retrieval_hits = payload
+            qa_grounding = compute_grounding_diagnostics(
+                question_retrieval_hits,
+                selected_source_ids=qa_source_id_filters,
+                expected_study_specific_grounding=qa_expected_study_specific_grounding,
+            )
             answer_path_raw = row.get("answer_path")
+            clarification_path_raw = row.get("clarification_path")
+            clarification_present = False
+            if clarification_path_raw:
+                clarification_path = Path(str(clarification_path_raw))
+                clarification_present = clarification_path.exists()
             if not answer_path_raw:
                 abstained_question_count += 1
+                if clarification_present:
+                    clarified_question_count += 1
+                qa_answer_summaries.append(
+                    {
+                        "question_id": question_id,
+                        "question": question,
+                        "artifact_present": clarification_present,
+                        "text_present": False,
+                        "status": "clarified" if clarification_present else "abstained",
+                        "answered": False,
+                        "abstained": True,
+                        "clarified": clarification_present,
+                        "retrieval_hit_count": len(question_retrieval_hits),
+                        "stored_citation_marker_count": 0,
+                        "inline_citation_marker_count": 0,
+                        "unsupported_marker_count": 0,
+                        "unsupported_inline_citation_marker_count": 0,
+                        "citation_marker_coverage_ratio": 0.0,
+                        "uncertainty_noted": clarification_present,
+                        "schema_repair_applied": False,
+                        "target_health_literacy": health_literacy,
+                        "word_count": 0.0,
+                        "sentence_count": 0.0,
+                        "avg_words_per_sentence": 0.0,
+                        "flesch_reading_ease": 0.0,
+                        "flesch_kincaid_grade": 0.0,
+                        "sentence_with_citation_count": 0.0,
+                        "sentence_without_citation_count": 0.0,
+                        "sentence_citation_coverage_ratio": 0.0,
+                        "citationless_sentence_count": 0.0,
+                        "citationless_sentence_rate": 0.0,
+                        "unsupported_sentence_count": 0.0,
+                        "qa_grade_threshold": target_grade_threshold(health_literacy, artifact_type="qa"),
+                        "qa_grade_target_met": False,
+                        "expected_study_specific_grounding": qa_expected_study_specific_grounding,
+                        **qa_grounding,
+                        "grounding_gap_declared": clarification_present,
+                        "unsupported_claim_risk": False,
+                        "failure_flags": {
+                            "missing_selected_study_grounding": bool(qa_grounding["study_specific_grounding_gap"]),
+                            "foreign_study_contamination": bool(qa_grounding["foreign_study_hit_present"]),
+                            "regulatory_only_grounding": bool(qa_grounding["regulatory_only_grounding"]),
+                            "unsupported_claim_risk": False,
+                            "omitted_required_element": False,
+                            "overconfident_answer": False,
+                            "malformed_structured_output": False,
+                            "grounding_gap_declared": clarification_present,
+                        },
+                    }
+                )
                 continue
             answer_path = Path(answer_path_raw)
             if not answer_path.exists():
@@ -696,15 +1116,29 @@ def evaluate_run_outputs(run_id: str, run_dir: Path) -> dict[str, Any]:
             repair_notes = answer.get("schema_repair_notes", [])
             if not isinstance(repair_notes, list):
                 repair_notes = []
+            grounding_gap_declared = explicit_grounding_gap_declared(
+                answer_text,
+                limitations=answer.get("grounding_limitations") if isinstance(answer.get("grounding_limitations"), list) else [],
+            )
+            support_diagnostics = sentence_support_diagnostics(
+                answer_text,
+                unsupported_markers=unsupported_markers,
+                missing_required_evidence=qa_grounding["study_specific_grounding_gap"] and not grounding_gap_declared,
+            )
 
             answer_summary = {
-                "question_id": row.get("question_id"),
-                "question": row.get("question"),
+                "question_id": question_id,
+                "question": question,
                 "artifact_present": True,
                 "text_present": bool(answer_text),
-                "retrieval_hit_count": len(load_json(Path(row["retrieval_hits_path"]))) if row.get("retrieval_hits_path") else 0,
+                "status": "answered",
+                "answered": True,
+                "abstained": False,
+                "clarified": False,
+                "retrieval_hit_count": len(question_retrieval_hits),
                 "stored_citation_marker_count": len(stored_markers),
                 "inline_citation_marker_count": len(inline_markers),
+                "unsupported_marker_count": len(unsupported_markers),
                 "unsupported_inline_citation_marker_count": len(unsupported_markers),
                 "citation_marker_coverage_ratio": round(
                     len(set(inline_markers)) / max(len(available_for_question), 1),
@@ -715,46 +1149,127 @@ def evaluate_run_outputs(run_id: str, run_dir: Path) -> dict[str, Any]:
                 "target_health_literacy": health_literacy,
                 **readability_metrics(answer_text),
                 **sentence_citation_metrics(answer_text),
+                "citationless_sentence_count": support_diagnostics["citationless_sentence_count"],
+                "citationless_sentence_rate": support_diagnostics["citationless_sentence_rate"],
+                "unsupported_sentence_count": support_diagnostics["unsupported_sentence_count"],
+                "expected_study_specific_grounding": qa_expected_study_specific_grounding,
+                **qa_grounding,
+                "grounding_gap_declared": grounding_gap_declared,
             }
             qa_grade_threshold = target_grade_threshold(health_literacy, artifact_type="qa")
             answer_summary["qa_grade_threshold"] = qa_grade_threshold
             answer_summary["qa_grade_target_met"] = answer_summary["flesch_kincaid_grade"] <= qa_grade_threshold
+            answer_summary["unsupported_claim_risk"] = bool(
+                answer_summary["unsupported_marker_count"]
+                or answer_summary["unsupported_sentence_count"]
+                or (qa_grounding["study_specific_grounding_gap"] and not grounding_gap_declared)
+            )
+            answer_summary["failure_flags"] = {
+                "missing_selected_study_grounding": bool(qa_grounding["study_specific_grounding_gap"]),
+                "foreign_study_contamination": bool(qa_grounding["foreign_study_hit_present"]),
+                "regulatory_only_grounding": bool(qa_grounding["regulatory_only_grounding"]),
+                "unsupported_claim_risk": bool(answer_summary["unsupported_claim_risk"]),
+                "omitted_required_element": False,
+                "overconfident_answer": bool(
+                    not answer_summary["uncertainty_noted"]
+                    and (answer_summary["unsupported_claim_risk"] or answer_summary["citationless_sentence_rate"] > 0.5)
+                ),
+                "malformed_structured_output": False,
+                "grounding_gap_declared": bool(grounding_gap_declared or answer_summary["uncertainty_noted"]),
+            }
             qa_answer_summaries.append(answer_summary)
             evaluation_records.extend(
                 build_evaluation_records(
                     run_id,
                     metric_group="qa_answer",
-                    case_id=str(row.get("question_id")),
+                    case_id=question_id,
                     metrics={
                         key: value
                         for key, value in answer_summary.items()
-                        if key not in {"question_id", "question"}
+                        if key not in {"question_id", "question", "failure_flags"}
                     },
+                    metadata=summary_metadata,
                 )
             )
 
     if qa_answer_summaries:
-        avg_flesch = sum(item["flesch_reading_ease"] for item in qa_answer_summaries) / len(qa_answer_summaries)
-        avg_words = sum(item["word_count"] for item in qa_answer_summaries) / len(qa_answer_summaries)
-        avg_citation_coverage = sum(item["citation_marker_coverage_ratio"] for item in qa_answer_summaries) / len(qa_answer_summaries)
-        avg_sentence_citation_coverage = sum(item["sentence_citation_coverage_ratio"] for item in qa_answer_summaries) / len(qa_answer_summaries)
+        answered_items = [item for item in qa_answer_summaries if item.get("answered")]
+        avg_flesch = sum(item["flesch_reading_ease"] for item in answered_items) / len(answered_items) if answered_items else 0.0
+        avg_words = sum(item["word_count"] for item in answered_items) / len(answered_items) if answered_items else 0.0
+        avg_citation_coverage = sum(item["citation_marker_coverage_ratio"] for item in answered_items) / len(answered_items) if answered_items else 0.0
+        avg_sentence_citation_coverage = sum(item["sentence_citation_coverage_ratio"] for item in answered_items) / len(answered_items) if answered_items else 0.0
+        avg_fkg = sum(item["flesch_kincaid_grade"] for item in answered_items) / len(answered_items) if answered_items else 0.0
+        total_answer_sentence_count = sum(float(item.get("sentence_count", 0.0)) for item in answered_items)
+        grounding_source_ids_used = sorted(
+            {
+                source_id
+                for item in qa_answer_summaries
+                for source_id in item.get("grounding_source_ids_used", [])
+            }
+        )
+        foreign_source_ids_detected = sorted(
+            {
+                source_id
+                for item in qa_answer_summaries
+                for source_id in item.get("foreign_source_ids_detected", [])
+            }
+        )
+        qa_failure_flags = {
+            "missing_selected_study_grounding": any(item.get("failure_flags", {}).get("missing_selected_study_grounding") for item in qa_answer_summaries),
+            "foreign_study_contamination": any(item.get("failure_flags", {}).get("foreign_study_contamination") for item in qa_answer_summaries),
+            "regulatory_only_grounding": any(item.get("failure_flags", {}).get("regulatory_only_grounding") for item in qa_answer_summaries),
+            "unsupported_claim_risk": any(item.get("failure_flags", {}).get("unsupported_claim_risk") for item in qa_answer_summaries),
+            "omitted_required_element": False,
+            "overconfident_answer": any(item.get("failure_flags", {}).get("overconfident_answer") for item in qa_answer_summaries),
+            "malformed_structured_output": False,
+            "grounding_gap_declared": any(item.get("failure_flags", {}).get("grounding_gap_declared") for item in qa_answer_summaries),
+        }
         qa_aggregate = {
             "artifact_present": True,
             "question_count": len(qa_index_rows),
-            "answered_question_count": len(qa_answer_summaries),
+            "answered_question_count": len(answered_items),
+            "answered_count": len(answered_items),
             "abstained_question_count": abstained_question_count,
+            "abstained_count": abstained_question_count,
+            "clarified_count": clarified_question_count,
             "abstention_rate": round(abstained_question_count / max(len(qa_index_rows), 1), 4),
-            "answers_with_uncertainty_count": sum(1 for item in qa_answer_summaries if item["uncertainty_noted"]),
+            "answers_with_uncertainty_count": sum(1 for item in answered_items if item["uncertainty_noted"]),
+            "uncertainty_flag_count": sum(1 for item in answered_items if item["uncertainty_noted"]),
             "uncertainty_rate": round(
-                sum(1 for item in qa_answer_summaries if item["uncertainty_noted"]) / max(len(qa_answer_summaries), 1),
+                sum(1 for item in answered_items if item["uncertainty_noted"]) / max(len(answered_items), 1),
                 4,
-            ) if qa_answer_summaries else 0.0,
-            "answers_with_schema_repair_count": sum(1 for item in qa_answer_summaries if item["schema_repair_applied"]),
-            "answers_meeting_grade_target_count": sum(1 for item in qa_answer_summaries if item["qa_grade_target_met"]),
+            ) if answered_items else 0.0,
+            "answers_with_schema_repair_count": sum(1 for item in answered_items if item["schema_repair_applied"]),
+            "answers_meeting_grade_target_count": sum(1 for item in answered_items if item["qa_grade_target_met"]),
             "average_flesch_reading_ease": round(avg_flesch, 4),
+            "average_flesch_kincaid_grade": round(avg_fkg, 4),
             "average_word_count": round(avg_words, 4),
             "average_citation_marker_coverage_ratio": round(avg_citation_coverage, 4),
             "average_sentence_citation_coverage_ratio": round(avg_sentence_citation_coverage, 4),
+            "unsupported_marker_count": sum(int(item.get("unsupported_marker_count", 0)) for item in answered_items),
+            "unsupported_sentence_count": sum(int(item.get("unsupported_sentence_count", 0)) for item in answered_items),
+            "citationless_sentence_count": sum(int(item.get("citationless_sentence_count", 0)) for item in answered_items),
+            "citationless_sentence_rate": round(
+                sum(float(item.get("citationless_sentence_count", 0.0)) for item in answered_items) / max(total_answer_sentence_count, 1),
+                4,
+            ) if answered_items else 0.0,
+            "selected_study_hit_count": sum(int(item.get("selected_study_hit_count", 0)) for item in qa_answer_summaries),
+            "selected_study_hit_present": any(bool(item.get("selected_study_hit_present")) for item in qa_answer_summaries),
+            "foreign_study_hit_count": sum(int(item.get("foreign_study_hit_count", 0)) for item in qa_answer_summaries),
+            "foreign_study_hit_present": any(bool(item.get("foreign_study_hit_present")) for item in qa_answer_summaries),
+            "regulatory_hit_count": sum(int(item.get("regulatory_hit_count", 0)) for item in qa_answer_summaries),
+            "total_hit_count": sum(int(item.get("total_hit_count", 0)) for item in qa_answer_summaries),
+            "study_specific_grounding_met": not any(
+                item.get("expected_study_specific_grounding") and not item.get("selected_study_hit_present")
+                for item in qa_answer_summaries
+            ),
+            "study_specific_grounding_gap": any(
+                item.get("expected_study_specific_grounding") and not item.get("selected_study_hit_present")
+                for item in qa_answer_summaries
+            ),
+            "grounding_source_ids_used": grounding_source_ids_used,
+            "foreign_source_ids_detected": foreign_source_ids_detected,
+            "failure_flags": qa_failure_flags,
             "per_question": qa_answer_summaries,
         }
         summary["qa_answers"] = qa_aggregate
@@ -767,17 +1282,35 @@ def evaluate_run_outputs(run_id: str, run_dir: Path) -> dict[str, Any]:
                     "artifact_present": True,
                     "question_count": qa_aggregate["question_count"],
                     "answered_question_count": qa_aggregate["answered_question_count"],
+                    "answered_count": qa_aggregate["answered_count"],
                     "abstained_question_count": qa_aggregate["abstained_question_count"],
+                    "abstained_count": qa_aggregate["abstained_count"],
+                    "clarified_count": qa_aggregate["clarified_count"],
                     "abstention_rate": qa_aggregate["abstention_rate"],
                     "answers_with_uncertainty_count": qa_aggregate["answers_with_uncertainty_count"],
+                    "uncertainty_flag_count": qa_aggregate["uncertainty_flag_count"],
                     "uncertainty_rate": qa_aggregate["uncertainty_rate"],
                     "answers_with_schema_repair_count": qa_aggregate["answers_with_schema_repair_count"],
                     "answers_meeting_grade_target_count": qa_aggregate["answers_meeting_grade_target_count"],
                     "average_flesch_reading_ease": qa_aggregate["average_flesch_reading_ease"],
+                    "average_flesch_kincaid_grade": qa_aggregate["average_flesch_kincaid_grade"],
                     "average_word_count": qa_aggregate["average_word_count"],
                     "average_citation_marker_coverage_ratio": qa_aggregate["average_citation_marker_coverage_ratio"],
                     "average_sentence_citation_coverage_ratio": qa_aggregate["average_sentence_citation_coverage_ratio"],
+                    "unsupported_marker_count": qa_aggregate["unsupported_marker_count"],
+                    "unsupported_sentence_count": qa_aggregate["unsupported_sentence_count"],
+                    "citationless_sentence_count": qa_aggregate["citationless_sentence_count"],
+                    "citationless_sentence_rate": qa_aggregate["citationless_sentence_rate"],
+                    "selected_study_hit_count": qa_aggregate["selected_study_hit_count"],
+                    "selected_study_hit_present": qa_aggregate["selected_study_hit_present"],
+                    "foreign_study_hit_count": qa_aggregate["foreign_study_hit_count"],
+                    "foreign_study_hit_present": qa_aggregate["foreign_study_hit_present"],
+                    "regulatory_hit_count": qa_aggregate["regulatory_hit_count"],
+                    "total_hit_count": qa_aggregate["total_hit_count"],
+                    "study_specific_grounding_met": qa_aggregate["study_specific_grounding_met"],
+                    "study_specific_grounding_gap": qa_aggregate["study_specific_grounding_gap"],
                 },
+                metadata=summary_metadata,
             )
         )
     else:
@@ -785,13 +1318,64 @@ def evaluate_run_outputs(run_id: str, run_dir: Path) -> dict[str, Any]:
             "artifact_present": bool(qa_index_rows),
             "question_count": len(qa_index_rows),
             "answered_question_count": 0,
+            "answered_count": 0,
             "abstained_question_count": len(qa_index_rows),
+            "abstained_count": len(qa_index_rows),
+            "clarified_count": 0,
             "abstention_rate": round(len(qa_index_rows) / max(len(qa_index_rows), 1), 4) if qa_index_rows else 0.0,
+            "uncertainty_flag_count": 0,
             "uncertainty_rate": 0.0,
+            "unsupported_marker_count": 0,
+            "unsupported_sentence_count": 0,
+            "citationless_sentence_count": 0,
+            "citationless_sentence_rate": 0.0,
+            "selected_study_hit_count": 0,
+            "selected_study_hit_present": False,
+            "foreign_study_hit_count": 0,
+            "foreign_study_hit_present": False,
+            "regulatory_hit_count": 0,
+            "total_hit_count": 0,
+            "study_specific_grounding_met": True,
+            "study_specific_grounding_gap": False,
+            "grounding_source_ids_used": [],
+            "foreign_source_ids_detected": [],
+            "failure_flags": {
+                "missing_selected_study_grounding": False,
+                "foreign_study_contamination": False,
+                "regulatory_only_grounding": False,
+                "unsupported_claim_risk": False,
+                "omitted_required_element": False,
+                "overconfident_answer": False,
+                "malformed_structured_output": False,
+                "grounding_gap_declared": False,
+            },
         }
+
+    case_failure_flags = {
+        "missing_selected_study_grounding": bool(summary["draft"].get("failure_flags", {}).get("missing_selected_study_grounding"))
+        or bool(summary["qa_answers"].get("failure_flags", {}).get("missing_selected_study_grounding")),
+        "foreign_study_contamination": bool(summary["draft"].get("failure_flags", {}).get("foreign_study_contamination"))
+        or bool(summary["qa_answers"].get("failure_flags", {}).get("foreign_study_contamination")),
+        "regulatory_only_grounding": bool(summary["draft"].get("failure_flags", {}).get("regulatory_only_grounding"))
+        or bool(summary["qa_answers"].get("failure_flags", {}).get("regulatory_only_grounding")),
+        "unsupported_claim_risk": bool(summary["draft"].get("failure_flags", {}).get("unsupported_claim_risk"))
+        or bool(summary["qa_answers"].get("failure_flags", {}).get("unsupported_claim_risk")),
+        "omitted_required_element": bool(summary["draft"].get("failure_flags", {}).get("omitted_required_element")),
+        "overconfident_answer": bool(summary["qa_answers"].get("failure_flags", {}).get("overconfident_answer")),
+        "malformed_structured_output": bool(summary["structured_record"].get("failure_flags", {}).get("malformed_structured_output")),
+        "grounding_gap_declared": bool(summary["draft"].get("failure_flags", {}).get("grounding_gap_declared"))
+        or bool(summary["qa_answers"].get("failure_flags", {}).get("grounding_gap_declared")),
+    }
+    summary["failure_taxonomy"] = {
+        "draft": summary["draft"].get("failure_flags", {}),
+        "structured_record": summary["structured_record"].get("failure_flags", {}),
+        "qa_answers": summary["qa_answers"].get("failure_flags", {}),
+        "case_failure_flags": case_failure_flags,
+    }
 
     qualitative_bundle = {
         "run_id": run_id,
+        "metadata": summary_metadata,
         "retrieval_hits": retrieval_hits,
         "personalized_consent_draft": load_json(draft_path) if draft_path.exists() else None,
         "structured_consent_record": load_json(structured_path) if structured_path.exists() else None,

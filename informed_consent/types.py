@@ -125,3 +125,5 @@ class RunManifest:
     artifact_paths: dict[str, str]
     tags: list[str] = field(default_factory=list)
     notes: str = ""
+    runtime_metadata: dict[str, Any] = field(default_factory=dict)
+    context_metadata: dict[str, Any] = field(default_factory=dict)

@@ -435,6 +435,27 @@ class BaseAgent:
             metadata=metadata,
         )
 
+    def build_prompt_identifiers(
+        self,
+        *,
+        system_prompt_filename: str,
+        user_prompt_filename: str,
+    ) -> dict[str, str]:
+        return {
+            "system_prompt_id": system_prompt_filename,
+            "user_prompt_id": user_prompt_filename,
+            "system_prompt_path": str(self.tools.prompts.path(system_prompt_filename)),
+            "user_prompt_path": str(self.tools.prompts.path(user_prompt_filename)),
+        }
+
+    def build_generation_metadata(self) -> dict[str, Any]:
+        return {
+            "model_id": self.runtime.config.models.generator_model,
+            "embedding_model_id": self.runtime.config.models.embedding_model,
+            "temperature": self.runtime.config.models.temperature,
+            "max_tokens": self.runtime.config.models.max_tokens,
+        }
+
 
 class RAGAgent(BaseAgent):
     agent_label = "RAG Agent"
@@ -603,6 +624,10 @@ class PersonalizationAgent(BaseAgent):
                 },
             )
         system_prompt = self.tools.prompts.load(system_prompt_filename)
+        prompt_identifiers = self.build_prompt_identifiers(
+            system_prompt_filename=system_prompt_filename,
+            user_prompt_filename=user_prompt_filename,
+        )
 
         request_bundle = {
             "agent": self.agent_label,
@@ -610,6 +635,7 @@ class PersonalizationAgent(BaseAgent):
             "patient_profile": asdict(patient_profile),
             "generation_query": generation_query,
             "workflow_variant": workflow_variant,
+            **self.build_generation_metadata(),
             "draft_content_plan": draft_content_plan or {},
             "top_k": top_k or self.runtime.config.retrieval.top_k,
             "retrieval_mode_used": retrieval_artifacts["mode_used"],
@@ -622,8 +648,8 @@ class PersonalizationAgent(BaseAgent):
             "dense_hits": retrieval_artifacts["dense_hits"],
             "retrieval_hits": retrieval_hits,
             "evidence_package": evidence_package,
-            "system_prompt_path": str(self.tools.prompts.path(system_prompt_filename)),
-            "user_prompt_path": str(self.tools.prompts.path(user_prompt_filename)),
+            "prompt_identifiers": prompt_identifiers,
+            **prompt_identifiers,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -774,12 +800,17 @@ class PersonalizationAgent(BaseAgent):
             },
         )
         system_prompt = self.tools.prompts.load("revise_consent_draft_system.txt")
+        prompt_identifiers = self.build_prompt_identifiers(
+            system_prompt_filename="revise_consent_draft_system.txt",
+            user_prompt_filename="revise_consent_draft_user.txt",
+        )
 
         request_bundle = {
             "agent": self.agent_label,
             "run_id": run_id,
             "patient_profile": asdict(patient_profile),
             "generation_query": generation_query,
+            **self.build_generation_metadata(),
             "draft_audit": draft_audit,
             "draft_content_plan": draft_content_plan or {},
             "recovery_targets": recovery_targets or [],
@@ -796,8 +827,8 @@ class PersonalizationAgent(BaseAgent):
             "dense_hits": retrieval_artifacts["dense_hits"],
             "retrieval_hits": retrieval_hits,
             "evidence_package": evidence_package,
-            "system_prompt_path": str(self.tools.prompts.path("revise_consent_draft_system.txt")),
-            "user_prompt_path": str(self.tools.prompts.path("revise_consent_draft_user.txt")),
+            "prompt_identifiers": prompt_identifiers,
+            **prompt_identifiers,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -956,6 +987,10 @@ class ConversationalAgent(BaseAgent):
                 },
             )
         system_prompt = self.tools.prompts.load(system_prompt_filename)
+        prompt_identifiers = self.build_prompt_identifiers(
+            system_prompt_filename=system_prompt_filename,
+            user_prompt_filename=user_prompt_filename,
+        )
 
         request_bundle = {
             "agent": self.agent_label,
@@ -964,6 +999,7 @@ class ConversationalAgent(BaseAgent):
             "question": question,
             "patient_profile": asdict(patient_profile),
             "workflow_variant": workflow_variant,
+            **self.build_generation_metadata(),
             "top_k": top_k or self.runtime.config.retrieval.top_k,
             "retrieval_mode_used": retrieval_artifacts["mode_used"],
             "dense_retrieval_available": retrieval_artifacts["dense_available"],
@@ -975,8 +1011,8 @@ class ConversationalAgent(BaseAgent):
             "dense_hits": retrieval_artifacts["dense_hits"],
             "retrieval_hits": retrieval_hits,
             "evidence_package": evidence_package,
-            "system_prompt_path": str(self.tools.prompts.path(system_prompt_filename)),
-            "user_prompt_path": str(self.tools.prompts.path(user_prompt_filename)),
+            "prompt_identifiers": prompt_identifiers,
+            **prompt_identifiers,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -1125,13 +1161,18 @@ class ConsentFormalizationAgent(BaseAgent):
             },
         )
         system_prompt = self.tools.prompts.load("formalize_consent_system.txt")
+        prompt_identifiers = self.build_prompt_identifiers(
+            system_prompt_filename="formalize_consent_system.txt",
+            user_prompt_filename="formalize_consent_user.txt",
+        )
 
         request_bundle = {
             "agent": self.agent_label,
             "run_id": run_id,
             "patient_profile": asdict(patient_profile),
-            "system_prompt_path": str(self.tools.prompts.path("formalize_consent_system.txt")),
-            "user_prompt_path": str(self.tools.prompts.path("formalize_consent_user.txt")),
+            **self.build_generation_metadata(),
+            "prompt_identifiers": prompt_identifiers,
+            **prompt_identifiers,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},

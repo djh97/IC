@@ -1,0 +1,32 @@
+{
+  "batch_id": "nct03877237_gonogo_vanilla_llm_v1",
+  "base_run_id": "REPLACE_WITH_PREPARED_RUN_ID",
+  "reporting_role": "pilot",
+  "defaults": {
+    "template_file": "data/raw/examples/base_consent_template.txt",
+    "top_k": 6,
+    "generate_draft": true,
+    "formalize": true,
+    "retrieval_mode": "hybrid",
+    "retrieval_filter_logic": "union",
+    "retrieval_source_groups": [
+      "regulatory_guidance",
+      "trial_materials"
+    ],
+    "workflow_variant": "vanilla_llm"
+  },
+  "cases": [
+    {
+      "case_id": "nct03877237_example_us_medium_literacy_study_specific_basics_gonogo_vanilla_llm",
+      "study_source_id": "nct03877237",
+      "study_id": "NCT03877237",
+      "site_id": "PUBLIC-SOURCE",
+      "patient_profile_file": "configs/patient_profiles/example_us_medium_literacy.json",
+      "question_set_file": "configs/question_sets/study_specific_basics.json",
+      "retrieval_source_ids": [
+        "nct03877237"
+      ],
+      "notes": "Go or no-go preflight case for the no-retrieval baseline before the long live comparison run."
+    }
+  ]
+}

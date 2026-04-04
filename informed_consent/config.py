@@ -52,9 +52,20 @@ def build_default_config(project_root: str | Path | None = None) -> AppConfig:
     load_dotenv()
     root = Path(project_root or ".").resolve()
     model_endpoint = os.getenv("HF_INFERENCE_ENDPOINT") or os.getenv("HF_ENDPOINT_URL")
+    model_defaults = ModelConfig()
+    generator_model = os.getenv("HF_MODEL_ID", model_defaults.generator_model).strip() or model_defaults.generator_model
+    embedding_model = (
+        os.getenv("IC_EMBEDDING_MODEL", model_defaults.embedding_model).strip() or model_defaults.embedding_model
+    )
+    reranker_model = os.getenv("IC_RERANKER_MODEL", "").strip() or None
 
     return AppConfig(
-        models=ModelConfig(endpoint_url=model_endpoint),
+        models=ModelConfig(
+            generator_model=generator_model,
+            embedding_model=embedding_model,
+            reranker_model=reranker_model,
+            endpoint_url=model_endpoint,
+        ),
         paths=PathConfig(
             project_root=root,
             artifact_root=root / "artifacts",

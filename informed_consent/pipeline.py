@@ -7,8 +7,10 @@ from pathlib import Path
 from typing import Any
 import csv
 import json
+import os
 import re
 import shutil
+import subprocess
 from hashlib import sha1
 from uuid import uuid4
 
@@ -97,6 +99,60 @@ class ConsentPipeline:
             conversational_agent=self.conversational_agent,
             formalization_agent=self.formalization_agent,
         )
+        self._git_commit_hash: str | None | bool = None
+
+    def get_git_commit_hash(self) -> str | None:
+        if self._git_commit_hash is False:
+            return None
+        if isinstance(self._git_commit_hash, str):
+            return self._git_commit_hash
+        try:
+            completed = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=self.config.paths.project_root,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except (OSError, subprocess.CalledProcessError):
+            self._git_commit_hash = False
+            return None
+        commit_hash = completed.stdout.strip()
+        self._git_commit_hash = commit_hash or False
+        return commit_hash or None
+
+    def build_runtime_metadata(
+        self,
+        *,
+        config_path: str | None = None,
+        base_run_id: str | None = None,
+        prompt_identifiers: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        index_summary_path = (
+            self.artifacts.run_path(base_run_id, "outputs", "hybrid_index", "hybrid_index_summary.json")
+            if base_run_id
+            else None
+        )
+        corpus_summary_path = (
+            self.artifacts.run_path(base_run_id, "outputs", "corpus_summary.json")
+            if base_run_id
+            else None
+        )
+        random_seed = os.getenv("IC_RANDOM_SEED", "").strip() or os.getenv("PYTHONHASHSEED", "").strip() or None
+        return {
+            "model_id": self.config.models.generator_model,
+            "embedding_model_id": self.config.models.embedding_model,
+            "retrieval_default_mode": self.config.retrieval.retrieval_mode,
+            "retrieval_default_top_k": self.config.retrieval.top_k,
+            "corpus_version": base_run_id,
+            "index_version": base_run_id if index_summary_path and index_summary_path.exists() else None,
+            "corpus_summary_path": str(corpus_summary_path) if corpus_summary_path and corpus_summary_path.exists() else None,
+            "index_summary_path": str(index_summary_path) if index_summary_path and index_summary_path.exists() else None,
+            "config_path": config_path,
+            "git_commit_hash": self.get_git_commit_hash(),
+            "random_seed": random_seed,
+            "prompt_identifiers": prompt_identifiers or {},
+        }
 
     def initialize_run(
         self,
@@ -106,13 +162,27 @@ class ConsentPipeline:
         study_id: str | None = None,
         site_id: str | None = None,
     ) -> RunManifest:
-        return self.artifacts.create_run(
+        manifest = self.artifacts.create_run(
             study_id=study_id or self.config.study_id,
             site_id=site_id or self.config.site_id,
             purpose=purpose,
             tags=tags,
             notes=notes,
         )
+        runtime_metadata = self.build_runtime_metadata()
+        context_metadata = {
+            "purpose": purpose,
+            "study_id": study_id or self.config.study_id,
+            "site_id": site_id or self.config.site_id,
+        }
+        self.artifacts.update_run_manifest(
+            manifest.run_id,
+            {
+                "runtime_metadata": runtime_metadata,
+                "context_metadata": context_metadata,
+            },
+        )
+        return manifest
 
     def bootstrap_run(
         self,
@@ -1327,6 +1397,10 @@ class ConsentPipeline:
             "spec_path": str(spec_path.resolve()),
             "base_run_id_override": base_run_id_override,
         }
+        batch_runtime_metadata = self.build_runtime_metadata(
+            config_path=str(spec_path.resolve()),
+            base_run_id=base_run_id,
+        )
         expanded_cases = self.expand_batch_case_definitions(
             spec=spec,
             spec_path=spec_path,
@@ -1401,6 +1475,34 @@ class ConsentPipeline:
                 site_id=site_identity,
             )
             case_run_id = case_manifest.run_id
+            case_context_metadata = {
+                "case_id": case_id,
+                "batch_run_id": batch_run_id,
+                "batch_id": batch_label,
+                "reporting_role": reporting_role,
+                "base_run_id": base_run_id,
+                "config_path": str(spec_path.resolve()),
+                "study_source_id": study_source_id,
+                "workflow_variant": workflow_variant,
+                "patient_profile_label": patient_profile_label,
+                "question_set_label": question_set_label,
+                "patient_profile_file": str(patient_profile_file),
+                "question_set_file": str(question_set_path) if question_set_path else None,
+                "template_file": str(template_file) if template_file else None,
+                "retrieval_mode": effective_retrieval_mode,
+                "retrieval_top_k": top_k or self.config.retrieval.top_k,
+                "retrieval_filter_logic": retrieval_filter_logic,
+                "retrieval_source_groups": retrieval_source_groups,
+                "retrieval_source_ids": retrieval_source_ids,
+                "dry_run": dry_run,
+            }
+            self.artifacts.update_run_manifest(
+                case_run_id,
+                {
+                    "runtime_metadata": batch_runtime_metadata,
+                    "context_metadata": case_context_metadata,
+                },
+            )
 
             case_result: dict[str, Any] = {
                 "case_id": case_id,
@@ -1419,9 +1521,17 @@ class ConsentPipeline:
                 "status": "pending",
                 "workflow_variant": workflow_variant,
                 "retrieval_mode": effective_retrieval_mode,
+                "retrieval_top_k": top_k or self.config.retrieval.top_k,
                 "retrieval_source_groups": retrieval_source_groups,
                 "retrieval_source_ids": retrieval_source_ids,
                 "retrieval_filter_logic": retrieval_filter_logic,
+                "model_id": batch_runtime_metadata.get("model_id"),
+                "embedding_model_id": batch_runtime_metadata.get("embedding_model_id"),
+                "config_path": batch_runtime_metadata.get("config_path"),
+                "corpus_version": batch_runtime_metadata.get("corpus_version"),
+                "index_version": batch_runtime_metadata.get("index_version"),
+                "random_seed": batch_runtime_metadata.get("random_seed"),
+                "git_commit_hash": batch_runtime_metadata.get("git_commit_hash"),
             }
             try:
                 if generate_draft:
@@ -1479,9 +1589,35 @@ class ConsentPipeline:
                 case_result["status"] = "completed"
 
                 summary = evaluation_payload["summary"]
+                summary_metadata = summary.get("metadata", {})
+                if not isinstance(summary_metadata, dict):
+                    summary_metadata = {}
+                case_result["model_id"] = summary_metadata.get("model_id") or case_result.get("model_id")
+                case_result["embedding_model_id"] = summary_metadata.get("embedding_model_id") or case_result.get("embedding_model_id")
+                case_result["draft_system_prompt_id"] = summary_metadata.get("draft_system_prompt_id")
+                case_result["draft_user_prompt_id"] = summary_metadata.get("draft_user_prompt_id")
+                case_result["formalization_system_prompt_id"] = summary_metadata.get("formalization_system_prompt_id")
+                case_result["formalization_user_prompt_id"] = summary_metadata.get("formalization_user_prompt_id")
+                case_result["qa_system_prompt_ids"] = summary_metadata.get("qa_system_prompt_ids", [])
+                case_result["qa_user_prompt_ids"] = summary_metadata.get("qa_user_prompt_ids", [])
                 draft_summary = summary.get("draft", {})
                 structured_summary = summary.get("structured_record", {})
                 qa_summary = summary.get("qa_answers", {})
+                failure_taxonomy = summary.get("failure_taxonomy", {})
+                if not isinstance(failure_taxonomy, dict):
+                    failure_taxonomy = {}
+                case_failure_flags = failure_taxonomy.get("case_failure_flags", {})
+                if not isinstance(case_failure_flags, dict):
+                    case_failure_flags = {}
+                draft_failure_flags = draft_summary.get("failure_flags", {})
+                if not isinstance(draft_failure_flags, dict):
+                    draft_failure_flags = {}
+                qa_failure_flags = qa_summary.get("failure_flags", {})
+                if not isinstance(qa_failure_flags, dict):
+                    qa_failure_flags = {}
+                structured_failure_flags = structured_summary.get("failure_flags", {})
+                if not isinstance(structured_failure_flags, dict):
+                    structured_failure_flags = {}
                 qa_per_question = qa_summary.get("per_question", []) or []
                 qa_avg_fkg = None
                 if qa_per_question:
@@ -1492,9 +1628,12 @@ class ConsentPipeline:
                     ]
                     if grade_values:
                         qa_avg_fkg = round(sum(grade_values) / len(grade_values), 4)
+                case_result["failure_taxonomy"] = failure_taxonomy
                 metric_rows.append(
                     {
                         "batch_run_id": batch_run_id,
+                        "batch_id": batch_label,
+                        "base_run_id": base_run_id,
                         "case_id": case_id,
                         "case_run_id": case_run_id,
                         "study_id": study_identity,
@@ -1504,29 +1643,97 @@ class ConsentPipeline:
                         "workflow_variant": workflow_variant,
                         "reporting_role": reporting_role,
                         "status": case_result["status"],
+                        "config_path": summary_metadata.get("config_path") or batch_runtime_metadata.get("config_path"),
+                        "git_commit_hash": summary_metadata.get("git_commit_hash") or batch_runtime_metadata.get("git_commit_hash"),
+                        "model_id": summary_metadata.get("model_id") or batch_runtime_metadata.get("model_id"),
+                        "embedding_model_id": summary_metadata.get("embedding_model_id") or batch_runtime_metadata.get("embedding_model_id"),
+                        "corpus_version": summary_metadata.get("corpus_version") or batch_runtime_metadata.get("corpus_version"),
+                        "index_version": summary_metadata.get("index_version") or batch_runtime_metadata.get("index_version"),
+                        "random_seed": summary_metadata.get("random_seed") or batch_runtime_metadata.get("random_seed"),
                         "retrieval_mode": effective_retrieval_mode,
+                        "retrieval_top_k": summary_metadata.get("retrieval_top_k") or (top_k or self.config.retrieval.top_k),
                         "retrieval_filter_logic": retrieval_filter_logic,
+                        "retrieval_source_groups": "|".join(retrieval_source_groups),
+                        "retrieval_source_ids": "|".join(retrieval_source_ids),
+                        "draft_system_prompt_id": summary_metadata.get("draft_system_prompt_id"),
+                        "draft_user_prompt_id": summary_metadata.get("draft_user_prompt_id"),
+                        "formalization_system_prompt_id": summary_metadata.get("formalization_system_prompt_id"),
+                        "formalization_user_prompt_id": summary_metadata.get("formalization_user_prompt_id"),
+                        "qa_system_prompt_ids": "|".join(summary_metadata.get("qa_system_prompt_ids", []) or []),
+                        "qa_user_prompt_ids": "|".join(summary_metadata.get("qa_user_prompt_ids", []) or []),
                         "question_count": qa_summary.get("question_count", 0),
+                        "qa_answered_count": qa_summary.get("answered_count"),
                         "qa_answered_question_count": qa_summary.get("answered_question_count"),
+                        "qa_abstained_count": qa_summary.get("abstained_count"),
                         "qa_abstained_question_count": qa_summary.get("abstained_question_count"),
+                        "qa_clarified_count": qa_summary.get("clarified_count"),
                         "qa_abstention_rate": qa_summary.get("abstention_rate"),
+                        "qa_uncertainty_flag_count": qa_summary.get("uncertainty_flag_count"),
                         "qa_uncertainty_rate": qa_summary.get("uncertainty_rate"),
+                        "qa_unsupported_marker_count": qa_summary.get("unsupported_marker_count"),
+                        "qa_unsupported_sentence_count": qa_summary.get("unsupported_sentence_count"),
+                        "qa_citationless_sentence_count": qa_summary.get("citationless_sentence_count"),
+                        "qa_citationless_sentence_rate": qa_summary.get("citationless_sentence_rate"),
+                        "qa_selected_study_hit_count": qa_summary.get("selected_study_hit_count"),
+                        "qa_selected_study_hit_present": qa_summary.get("selected_study_hit_present"),
+                        "qa_foreign_study_hit_count": qa_summary.get("foreign_study_hit_count"),
+                        "qa_foreign_study_hit_present": qa_summary.get("foreign_study_hit_present"),
+                        "qa_regulatory_hit_count": qa_summary.get("regulatory_hit_count"),
+                        "qa_total_hit_count": qa_summary.get("total_hit_count"),
+                        "qa_study_specific_grounding_met": qa_summary.get("study_specific_grounding_met"),
+                        "qa_study_specific_grounding_gap": qa_summary.get("study_specific_grounding_gap"),
+                        "qa_grounding_source_ids_used": "|".join(qa_summary.get("grounding_source_ids_used", []) or []),
+                        "qa_foreign_source_ids_detected": "|".join(qa_summary.get("foreign_source_ids_detected", []) or []),
                         "draft_expected_study_specific_grounding": draft_summary.get("expected_study_specific_grounding"),
                         "draft_study_specific_grounding_met": draft_summary.get("study_specific_grounding_met"),
                         "draft_study_specific_grounding_gap": draft_summary.get("study_specific_grounding_gap"),
+                        "draft_selected_study_hit_count": draft_summary.get("selected_study_hit_count"),
+                        "draft_selected_study_hit_present": draft_summary.get("selected_study_hit_present"),
+                        "draft_foreign_study_hit_count": draft_summary.get("foreign_study_hit_count"),
+                        "draft_foreign_study_hit_present": draft_summary.get("foreign_study_hit_present"),
                         "draft_study_specific_hit_count": draft_summary.get("study_specific_hit_count"),
                         "draft_regulatory_hit_count": draft_summary.get("regulatory_hit_count"),
+                        "draft_total_hit_count": draft_summary.get("total_hit_count"),
                         "draft_has_study_specific_evidence": draft_summary.get("has_study_specific_evidence"),
                         "draft_study_specific_hit_ratio": draft_summary.get("study_specific_hit_ratio"),
+                        "draft_grounding_source_ids_used": "|".join(draft_summary.get("grounding_source_ids_used", []) or []),
+                        "draft_foreign_source_ids_detected": "|".join(draft_summary.get("foreign_source_ids_detected", []) or []),
                         "draft_required_element_coverage_ratio": draft_summary.get("required_element_coverage_ratio"),
+                        "draft_missing_required_element_count": draft_summary.get("missing_required_element_count"),
                         "draft_citation_marker_coverage_ratio": draft_summary.get("citation_marker_coverage_ratio"),
                         "draft_sentence_citation_coverage_ratio": draft_summary.get("sentence_citation_coverage_ratio"),
+                        "draft_citationless_sentence_count": draft_summary.get("citationless_sentence_count"),
+                        "draft_citationless_sentence_rate": draft_summary.get("citationless_sentence_rate"),
+                        "draft_unsupported_marker_count": draft_summary.get("unsupported_marker_count"),
+                        "draft_unsupported_sentence_count": draft_summary.get("unsupported_sentence_count"),
                         "draft_flesch_kincaid_grade": draft_summary.get("flesch_kincaid_grade"),
+                        "draft_grounding_gap_declared": draft_summary.get("grounding_gap_declared"),
+                        "draft_unsupported_claim_risk": draft_summary.get("unsupported_claim_risk"),
                         "structured_schema_repair_applied": structured_summary.get("schema_repair_applied"),
                         "structured_required_field_presence_ratio": structured_summary.get("required_field_presence_ratio"),
+                        "structured_malformed_output": structured_summary.get("malformed_structured_output"),
                         "qa_average_citation_marker_coverage_ratio": qa_summary.get("average_citation_marker_coverage_ratio"),
                         "qa_average_sentence_citation_coverage_ratio": qa_summary.get("average_sentence_citation_coverage_ratio"),
                         "qa_average_flesch_kincaid_grade": qa_avg_fkg,
+                        "failure_missing_selected_study_grounding": case_failure_flags.get("missing_selected_study_grounding"),
+                        "failure_foreign_study_contamination": case_failure_flags.get("foreign_study_contamination"),
+                        "failure_regulatory_only_grounding": case_failure_flags.get("regulatory_only_grounding"),
+                        "failure_unsupported_claim_risk": case_failure_flags.get("unsupported_claim_risk"),
+                        "failure_omitted_required_element": case_failure_flags.get("omitted_required_element"),
+                        "failure_overconfident_answer": case_failure_flags.get("overconfident_answer"),
+                        "failure_malformed_structured_output": case_failure_flags.get("malformed_structured_output"),
+                        "failure_grounding_gap_declared": case_failure_flags.get("grounding_gap_declared"),
+                        "draft_failure_missing_selected_study_grounding": draft_failure_flags.get("missing_selected_study_grounding"),
+                        "draft_failure_foreign_study_contamination": draft_failure_flags.get("foreign_study_contamination"),
+                        "draft_failure_regulatory_only_grounding": draft_failure_flags.get("regulatory_only_grounding"),
+                        "draft_failure_unsupported_claim_risk": draft_failure_flags.get("unsupported_claim_risk"),
+                        "draft_failure_omitted_required_element": draft_failure_flags.get("omitted_required_element"),
+                        "qa_failure_missing_selected_study_grounding": qa_failure_flags.get("missing_selected_study_grounding"),
+                        "qa_failure_foreign_study_contamination": qa_failure_flags.get("foreign_study_contamination"),
+                        "qa_failure_regulatory_only_grounding": qa_failure_flags.get("regulatory_only_grounding"),
+                        "qa_failure_unsupported_claim_risk": qa_failure_flags.get("unsupported_claim_risk"),
+                        "qa_failure_overconfident_answer": qa_failure_flags.get("overconfident_answer"),
+                        "structured_failure_malformed_structured_output": structured_failure_flags.get("malformed_structured_output"),
                     }
                 )
             except Exception as exc:
@@ -1535,6 +1742,8 @@ class ConsentPipeline:
                 metric_rows.append(
                     {
                         "batch_run_id": batch_run_id,
+                        "batch_id": batch_label,
+                        "base_run_id": base_run_id,
                         "case_id": case_id,
                         "case_run_id": case_run_id,
                         "study_id": study_identity,
@@ -1544,28 +1753,80 @@ class ConsentPipeline:
                         "workflow_variant": workflow_variant,
                         "reporting_role": reporting_role,
                         "status": case_result["status"],
+                        "config_path": batch_runtime_metadata.get("config_path"),
+                        "git_commit_hash": batch_runtime_metadata.get("git_commit_hash"),
+                        "model_id": batch_runtime_metadata.get("model_id"),
+                        "embedding_model_id": batch_runtime_metadata.get("embedding_model_id"),
+                        "corpus_version": batch_runtime_metadata.get("corpus_version"),
+                        "index_version": batch_runtime_metadata.get("index_version"),
+                        "random_seed": batch_runtime_metadata.get("random_seed"),
                         "retrieval_mode": effective_retrieval_mode,
+                        "retrieval_top_k": top_k or self.config.retrieval.top_k,
+                        "retrieval_filter_logic": retrieval_filter_logic,
+                        "retrieval_source_groups": "|".join(retrieval_source_groups),
+                        "retrieval_source_ids": "|".join(retrieval_source_ids),
                         "question_count": len(questions),
+                        "qa_answered_count": None,
                         "qa_answered_question_count": None,
+                        "qa_abstained_count": None,
                         "qa_abstained_question_count": None,
+                        "qa_clarified_count": None,
                         "qa_abstention_rate": None,
+                        "qa_uncertainty_flag_count": None,
                         "qa_uncertainty_rate": None,
+                        "qa_unsupported_marker_count": None,
+                        "qa_unsupported_sentence_count": None,
+                        "qa_citationless_sentence_count": None,
+                        "qa_citationless_sentence_rate": None,
+                        "qa_selected_study_hit_count": None,
+                        "qa_selected_study_hit_present": None,
+                        "qa_foreign_study_hit_count": None,
+                        "qa_foreign_study_hit_present": None,
+                        "qa_regulatory_hit_count": None,
+                        "qa_total_hit_count": None,
+                        "qa_study_specific_grounding_met": None,
+                        "qa_study_specific_grounding_gap": None,
+                        "qa_grounding_source_ids_used": None,
+                        "qa_foreign_source_ids_detected": None,
                         "draft_expected_study_specific_grounding": None,
                         "draft_study_specific_grounding_met": None,
                         "draft_study_specific_grounding_gap": None,
+                        "draft_selected_study_hit_count": None,
+                        "draft_selected_study_hit_present": None,
+                        "draft_foreign_study_hit_count": None,
+                        "draft_foreign_study_hit_present": None,
                         "draft_study_specific_hit_count": None,
                         "draft_regulatory_hit_count": None,
+                        "draft_total_hit_count": None,
                         "draft_has_study_specific_evidence": None,
                         "draft_study_specific_hit_ratio": None,
+                        "draft_grounding_source_ids_used": None,
+                        "draft_foreign_source_ids_detected": None,
                         "draft_required_element_coverage_ratio": None,
+                        "draft_missing_required_element_count": None,
                         "draft_citation_marker_coverage_ratio": None,
                         "draft_sentence_citation_coverage_ratio": None,
+                        "draft_citationless_sentence_count": None,
+                        "draft_citationless_sentence_rate": None,
+                        "draft_unsupported_marker_count": None,
+                        "draft_unsupported_sentence_count": None,
                         "draft_flesch_kincaid_grade": None,
+                        "draft_grounding_gap_declared": None,
+                        "draft_unsupported_claim_risk": None,
                         "structured_schema_repair_applied": None,
                         "structured_required_field_presence_ratio": None,
+                        "structured_malformed_output": None,
                         "qa_average_citation_marker_coverage_ratio": None,
                         "qa_average_sentence_citation_coverage_ratio": None,
                         "qa_average_flesch_kincaid_grade": None,
+                        "failure_missing_selected_study_grounding": None,
+                        "failure_foreign_study_contamination": None,
+                        "failure_regulatory_only_grounding": None,
+                        "failure_unsupported_claim_risk": None,
+                        "failure_omitted_required_element": None,
+                        "failure_overconfident_answer": None,
+                        "failure_malformed_structured_output": None,
+                        "failure_grounding_gap_declared": None,
                     }
                 )
             case_records.append(case_result)
@@ -1575,6 +1836,13 @@ class ConsentPipeline:
             "batch_id": batch_label,
             "base_run_id": base_run_id,
             "reporting_role": reporting_role,
+            "config_path": str(spec_path.resolve()),
+            "model_id": batch_runtime_metadata.get("model_id"),
+            "embedding_model_id": batch_runtime_metadata.get("embedding_model_id"),
+            "corpus_version": batch_runtime_metadata.get("corpus_version"),
+            "index_version": batch_runtime_metadata.get("index_version"),
+            "git_commit_hash": batch_runtime_metadata.get("git_commit_hash"),
+            "random_seed": batch_runtime_metadata.get("random_seed"),
             "case_count": len(case_records),
             "completed_case_count": sum(1 for case in case_records if case.get("status") == "completed"),
             "failed_case_count": sum(1 for case in case_records if case.get("status") == "failed"),
@@ -1592,16 +1860,36 @@ class ConsentPipeline:
         completed_rows = [row for row in metric_rows if row.get("status") == "completed"]
         aggregate_metrics: dict[str, Any] = {}
         for key in (
+            "qa_answered_count",
             "qa_answered_question_count",
+            "qa_abstained_count",
             "qa_abstained_question_count",
+            "qa_clarified_count",
             "qa_abstention_rate",
+            "qa_uncertainty_flag_count",
             "qa_uncertainty_rate",
+            "qa_unsupported_marker_count",
+            "qa_unsupported_sentence_count",
+            "qa_citationless_sentence_count",
+            "qa_citationless_sentence_rate",
+            "qa_selected_study_hit_count",
+            "qa_foreign_study_hit_count",
+            "qa_regulatory_hit_count",
+            "qa_total_hit_count",
             "draft_study_specific_hit_count",
+            "draft_selected_study_hit_count",
+            "draft_foreign_study_hit_count",
             "draft_regulatory_hit_count",
+            "draft_total_hit_count",
             "draft_study_specific_hit_ratio",
             "draft_required_element_coverage_ratio",
+            "draft_missing_required_element_count",
             "draft_citation_marker_coverage_ratio",
             "draft_sentence_citation_coverage_ratio",
+            "draft_citationless_sentence_count",
+            "draft_citationless_sentence_rate",
+            "draft_unsupported_marker_count",
+            "draft_unsupported_sentence_count",
             "draft_flesch_kincaid_grade",
             "structured_required_field_presence_ratio",
             "qa_average_citation_marker_coverage_ratio",
@@ -1673,6 +1961,164 @@ class ConsentPipeline:
             if grounding_gap_flags
             else None
         )
+        for failure_field in (
+            "failure_missing_selected_study_grounding",
+            "failure_foreign_study_contamination",
+            "failure_regulatory_only_grounding",
+            "failure_unsupported_claim_risk",
+            "failure_omitted_required_element",
+            "failure_overconfident_answer",
+            "failure_malformed_structured_output",
+            "failure_grounding_gap_declared",
+        ):
+            flags = [
+                row.get(failure_field)
+                for row in completed_rows
+                if isinstance(row.get(failure_field), bool)
+            ]
+            aggregate_metrics[f"{failure_field}_rate"] = (
+                round(sum(1 for value in flags if value) / len(flags), 4)
+                if flags
+                else None
+            )
+        summary_payload["workflow_variants"] = sorted(
+            {
+                str(case.get("workflow_variant", "")).strip()
+                for case in case_records
+                if str(case.get("workflow_variant", "")).strip()
+            }
+        )
+        summary_payload["study_source_ids"] = sorted(
+            {
+                str(case.get("study_source_id", "")).strip()
+                for case in case_records
+                if str(case.get("study_source_id", "")).strip()
+            }
+        )
+        summary_payload["study_ids"] = sorted(
+            {
+                str(case.get("study_id", "")).strip()
+                for case in case_records
+                if str(case.get("study_id", "")).strip()
+            }
+        )
+        summary_payload["patient_profile_labels"] = sorted(
+            {
+                str(case.get("patient_profile_label", "")).strip()
+                for case in case_records
+                if str(case.get("patient_profile_label", "")).strip()
+            }
+        )
+        summary_payload["question_set_labels"] = sorted(
+            {
+                str(case.get("question_set_label", "")).strip()
+                for case in case_records
+                if str(case.get("question_set_label", "")).strip()
+            }
+        )
+        summary_payload["retrieval_modes"] = sorted(
+            {
+                str(case.get("retrieval_mode", "")).strip()
+                for case in case_records
+                if str(case.get("retrieval_mode", "")).strip()
+            }
+        )
+        summary_payload["retrieval_top_k_values"] = sorted(
+            {
+                int(case.get("retrieval_top_k"))
+                for case in case_records
+                if isinstance(case.get("retrieval_top_k"), int)
+            }
+        )
+        summary_payload["retrieval_filter_logics"] = sorted(
+            {
+                str(case.get("retrieval_filter_logic", "")).strip()
+                for case in case_records
+                if str(case.get("retrieval_filter_logic", "")).strip()
+            }
+        )
+        summary_payload["draft_system_prompt_ids"] = sorted(
+            {
+                str(case.get("draft_system_prompt_id", "")).strip()
+                for case in case_records
+                if str(case.get("draft_system_prompt_id", "")).strip()
+            }
+        )
+        summary_payload["draft_user_prompt_ids"] = sorted(
+            {
+                str(case.get("draft_user_prompt_id", "")).strip()
+                for case in case_records
+                if str(case.get("draft_user_prompt_id", "")).strip()
+            }
+        )
+        summary_payload["formalization_system_prompt_ids"] = sorted(
+            {
+                str(case.get("formalization_system_prompt_id", "")).strip()
+                for case in case_records
+                if str(case.get("formalization_system_prompt_id", "")).strip()
+            }
+        )
+        summary_payload["formalization_user_prompt_ids"] = sorted(
+            {
+                str(case.get("formalization_user_prompt_id", "")).strip()
+                for case in case_records
+                if str(case.get("formalization_user_prompt_id", "")).strip()
+            }
+        )
+        summary_payload["qa_system_prompt_ids"] = sorted(
+            {
+                str(prompt_id).strip()
+                for case in case_records
+                for prompt_id in (case.get("qa_system_prompt_ids", []) if isinstance(case.get("qa_system_prompt_ids"), list) else [])
+                if str(prompt_id).strip()
+            }
+        )
+        summary_payload["qa_user_prompt_ids"] = sorted(
+            {
+                str(prompt_id).strip()
+                for case in case_records
+                for prompt_id in (case.get("qa_user_prompt_ids", []) if isinstance(case.get("qa_user_prompt_ids"), list) else [])
+                if str(prompt_id).strip()
+            }
+        )
+
+        failure_summary_rows: list[dict[str, Any]] = []
+        failure_fields = [
+            "failure_missing_selected_study_grounding",
+            "failure_foreign_study_contamination",
+            "failure_regulatory_only_grounding",
+            "failure_unsupported_claim_risk",
+            "failure_omitted_required_element",
+            "failure_overconfident_answer",
+            "failure_malformed_structured_output",
+            "failure_grounding_gap_declared",
+        ]
+        grouped_completed_rows: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        for row in completed_rows:
+            key = (
+                str(row.get("workflow_variant", "")).strip() or "unknown",
+                str(row.get("question_set_label", "")).strip() or "unknown",
+            )
+            grouped_completed_rows.setdefault(key, []).append(row)
+        for (workflow_value, question_set_value), rows_for_group in sorted(grouped_completed_rows.items()):
+            case_count = len(rows_for_group)
+            for failure_field in failure_fields:
+                flags = [bool(row.get(failure_field)) for row in rows_for_group if isinstance(row.get(failure_field), bool)]
+                failure_count = sum(1 for flag in flags if flag)
+                failure_summary_rows.append(
+                    {
+                        "batch_run_id": batch_run_id,
+                        "batch_id": batch_label,
+                        "workflow_variant": workflow_value,
+                        "question_set_label": question_set_value,
+                        "failure_type": failure_field.removeprefix("failure_"),
+                        "case_count": case_count,
+                        "failure_count": failure_count,
+                        "failure_rate": round(failure_count / max(case_count, 1), 4),
+                    }
+                )
+        failure_summary_csv = self.artifacts.write_table_csv(f"{batch_run_id}_batch_failure_summary.csv", failure_summary_rows)
+        summary_payload["failure_summary_csv"] = str(failure_summary_csv)
         summary_payload["aggregate_metrics"] = aggregate_metrics
         (batch_dir / "batch_summary.json").write_text(json.dumps(summary_payload, indent=2), encoding="utf-8")
         return summary_payload
@@ -1716,6 +2162,27 @@ class ConsentPipeline:
                     "case_count": payload.get("case_count"),
                     "completed_case_count": payload.get("completed_case_count"),
                     "failed_case_count": payload.get("failed_case_count"),
+                    "workflow_variants": "|".join(payload.get("workflow_variants", []) or []),
+                    "study_source_ids": "|".join(payload.get("study_source_ids", []) or []),
+                    "study_ids": "|".join(payload.get("study_ids", []) or []),
+                    "patient_profile_labels": "|".join(payload.get("patient_profile_labels", []) or []),
+                    "question_set_labels": "|".join(payload.get("question_set_labels", []) or []),
+                    "model_id": payload.get("model_id"),
+                    "embedding_model_id": payload.get("embedding_model_id"),
+                    "retrieval_modes": "|".join(payload.get("retrieval_modes", []) or []),
+                    "retrieval_top_k_values": "|".join(str(value) for value in (payload.get("retrieval_top_k_values", []) or [])),
+                    "retrieval_filter_logics": "|".join(payload.get("retrieval_filter_logics", []) or []),
+                    "draft_system_prompt_ids": "|".join(payload.get("draft_system_prompt_ids", []) or []),
+                    "draft_user_prompt_ids": "|".join(payload.get("draft_user_prompt_ids", []) or []),
+                    "formalization_system_prompt_ids": "|".join(payload.get("formalization_system_prompt_ids", []) or []),
+                    "formalization_user_prompt_ids": "|".join(payload.get("formalization_user_prompt_ids", []) or []),
+                    "qa_system_prompt_ids": "|".join(payload.get("qa_system_prompt_ids", []) or []),
+                    "qa_user_prompt_ids": "|".join(payload.get("qa_user_prompt_ids", []) or []),
+                    "config_path": payload.get("config_path"),
+                    "corpus_version": payload.get("corpus_version"),
+                    "index_version": payload.get("index_version"),
+                    "git_commit_hash": payload.get("git_commit_hash"),
+                    "random_seed": payload.get("random_seed"),
                     **aggregate_metrics,
                     "batch_summary_path": str(summary_path.resolve()),
                     "case_metrics_csv": case_metrics_csv,
@@ -1741,53 +2208,133 @@ class ConsentPipeline:
         json_path = self.artifacts.tables_dir / f"{comparison_label}.json"
         case_csv_path = self.artifacts.write_table_csv(f"{comparison_label}_case_rows.csv", case_rows)
 
-        grouped_rows: list[dict[str, Any]] = []
-        group_fields = ("workflow_variant", "question_set_label")
         aggregate_metric_fields = [
+            "draft_selected_study_hit_present",
+            "draft_foreign_study_hit_present",
+            "draft_regulatory_hit_count",
             "draft_study_specific_grounding_met",
             "draft_study_specific_grounding_gap",
-            "draft_study_specific_hit_count",
             "draft_required_element_coverage_ratio",
             "draft_sentence_citation_coverage_ratio",
+            "draft_citationless_sentence_rate",
+            "draft_unsupported_sentence_count",
             "draft_flesch_kincaid_grade",
-            "qa_answered_question_count",
-            "qa_abstained_question_count",
+            "qa_answered_count",
+            "qa_abstained_count",
+            "qa_clarified_count",
             "qa_abstention_rate",
+            "qa_uncertainty_flag_count",
             "qa_uncertainty_rate",
+            "qa_citationless_sentence_rate",
+            "qa_unsupported_sentence_count",
+            "qa_selected_study_hit_present",
+            "qa_foreign_study_hit_present",
+            "qa_study_specific_grounding_met",
+            "qa_study_specific_grounding_gap",
             "qa_average_sentence_citation_coverage_ratio",
             "qa_average_flesch_kincaid_grade",
             "structured_required_field_presence_ratio",
             "structured_schema_repair_applied",
+            "structured_malformed_output",
+            "failure_missing_selected_study_grounding",
+            "failure_foreign_study_contamination",
+            "failure_regulatory_only_grounding",
+            "failure_unsupported_claim_risk",
+            "failure_omitted_required_element",
+            "failure_overconfident_answer",
+            "failure_malformed_structured_output",
+            "failure_grounding_gap_declared",
         ]
-        grouped_values: dict[tuple[str, str], dict[str, list[float]]] = {}
-        grouped_counts: Counter[tuple[str, str]] = Counter()
+        failure_fields = [
+            "failure_missing_selected_study_grounding",
+            "failure_foreign_study_contamination",
+            "failure_regulatory_only_grounding",
+            "failure_unsupported_claim_risk",
+            "failure_omitted_required_element",
+            "failure_overconfident_answer",
+            "failure_malformed_structured_output",
+            "failure_grounding_gap_declared",
+        ]
+
+        def build_grouped_rows(grouping_fields: tuple[str, ...]) -> list[dict[str, Any]]:
+            grouped_values: dict[tuple[str, ...], dict[str, list[float]]] = {}
+            grouped_counts: Counter[tuple[str, ...]] = Counter()
+            grouped_metadata: dict[tuple[str, ...], dict[str, Any]] = {}
+            for row in case_rows:
+                key = tuple(str(row.get(field, "")).strip() or "unknown" for field in grouping_fields)
+                grouped_counts[key] += 1
+                grouped_values.setdefault(key, {})
+                grouped_metadata.setdefault(
+                    key,
+                    {
+                        "model_id": str(row.get("model_id", "")).strip() or None,
+                        "embedding_model_id": str(row.get("embedding_model_id", "")).strip() or None,
+                        "retrieval_mode": str(row.get("retrieval_mode", "")).strip() or None,
+                        "retrieval_top_k": row.get("retrieval_top_k"),
+                        "retrieval_filter_logic": str(row.get("retrieval_filter_logic", "")).strip() or None,
+                        "draft_system_prompt_id": str(row.get("draft_system_prompt_id", "")).strip() or None,
+                        "draft_user_prompt_id": str(row.get("draft_user_prompt_id", "")).strip() or None,
+                        "formalization_system_prompt_id": str(row.get("formalization_system_prompt_id", "")).strip() or None,
+                        "formalization_user_prompt_id": str(row.get("formalization_user_prompt_id", "")).strip() or None,
+                        "qa_system_prompt_ids": str(row.get("qa_system_prompt_ids", "")).strip() or None,
+                        "qa_user_prompt_ids": str(row.get("qa_user_prompt_ids", "")).strip() or None,
+                        "config_path": str(row.get("config_path", "")).strip() or None,
+                        "git_commit_hash": str(row.get("git_commit_hash", "")).strip() or None,
+                        "corpus_version": str(row.get("corpus_version", "")).strip() or None,
+                        "index_version": str(row.get("index_version", "")).strip() or None,
+                        "random_seed": str(row.get("random_seed", "")).strip() or None,
+                    },
+                )
+                for field in aggregate_metric_fields:
+                    parsed = parse_metric_value(row.get(field))
+                    if parsed is None:
+                        continue
+                    numeric_value = 1.0 if parsed is True else 0.0 if parsed is False else float(parsed)
+                    grouped_values[key].setdefault(field, []).append(numeric_value)
+
+            grouped_rows_local: list[dict[str, Any]] = []
+            for key, field_map in sorted(grouped_values.items()):
+                grouped_row: dict[str, Any] = {
+                    "case_count": grouped_counts[key],
+                    **grouped_metadata.get(key, {}),
+                }
+                for index, field_name in enumerate(grouping_fields):
+                    grouped_row[field_name] = key[index]
+                for field in aggregate_metric_fields:
+                    values = field_map.get(field, [])
+                    grouped_row[f"average_{field}"] = round(sum(values) / len(values), 4) if values else None
+                grouped_rows_local.append(grouped_row)
+            return grouped_rows_local
+
+        grouped_rows = build_grouped_rows(("workflow_variant", "question_set_label"))
+        grouped_csv_path = self.artifacts.write_table_csv(f"{comparison_label}_grouped_by_workflow_and_question_set.csv", grouped_rows)
+        workflow_rows = build_grouped_rows(("workflow_variant",))
+        workflow_csv_path = self.artifacts.write_table_csv(f"{comparison_label}_grouped_by_workflow.csv", workflow_rows)
+
+        failure_summary_rows: list[dict[str, Any]] = []
+        grouped_case_sets: dict[tuple[str, str], list[dict[str, Any]]] = {}
         for row in case_rows:
             key = (
                 str(row.get("workflow_variant", "")).strip() or "unknown",
                 str(row.get("question_set_label", "")).strip() or "unknown",
             )
-            grouped_counts[key] += 1
-            grouped_values.setdefault(key, {})
-            for field in aggregate_metric_fields:
-                parsed = parse_metric_value(row.get(field))
-                if parsed is None:
-                    continue
-                numeric_value = 1.0 if parsed is True else 0.0 if parsed is False else float(parsed)
-                grouped_values[key].setdefault(field, []).append(numeric_value)
-
-        for key, field_map in sorted(grouped_values.items()):
-            workflow_variant, question_set_label = key
-            grouped_row: dict[str, Any] = {
-                "workflow_variant": workflow_variant,
-                "question_set_label": question_set_label,
-                "case_count": grouped_counts[key],
-            }
-            for field in aggregate_metric_fields:
-                values = field_map.get(field, [])
-                grouped_row[f"average_{field}"] = round(sum(values) / len(values), 4) if values else None
-            grouped_rows.append(grouped_row)
-
-        grouped_csv_path = self.artifacts.write_table_csv(f"{comparison_label}_grouped_by_workflow_and_question_set.csv", grouped_rows)
+            grouped_case_sets.setdefault(key, []).append(row)
+        for (workflow_variant, question_set_label), grouped_case_rows in sorted(grouped_case_sets.items()):
+            case_count = len(grouped_case_rows)
+            for failure_field in failure_fields:
+                flags = [bool(parse_metric_value(row.get(failure_field))) for row in grouped_case_rows if parse_metric_value(row.get(failure_field)) is not None]
+                failure_count = sum(1 for flag in flags if flag)
+                failure_summary_rows.append(
+                    {
+                        "workflow_variant": workflow_variant,
+                        "question_set_label": question_set_label,
+                        "failure_type": failure_field.removeprefix("failure_"),
+                        "case_count": case_count,
+                        "failure_count": failure_count,
+                        "failure_rate": round(failure_count / max(case_count, 1), 4),
+                    }
+                )
+        failure_summary_csv = self.artifacts.write_table_csv(f"{comparison_label}_failure_summary.csv", failure_summary_rows)
         self.artifacts.write_json(
             json_path,
             {
@@ -1795,6 +2342,8 @@ class ConsentPipeline:
                 "aggregate_rows": rows,
                 "case_row_count": len(case_rows),
                 "grouped_row_count": len(grouped_rows),
+                "workflow_row_count": len(workflow_rows),
+                "failure_summary_row_count": len(failure_summary_rows),
             },
         )
         return {
@@ -1804,6 +2353,8 @@ class ConsentPipeline:
             "comparison_json": str(json_path),
             "case_rows_csv": str(case_csv_path),
             "grouped_comparison_csv": str(grouped_csv_path),
+            "overall_workflow_csv": str(workflow_csv_path),
+            "failure_summary_csv": str(failure_summary_csv),
         }
 
     def plan_public_sources(
