@@ -345,6 +345,34 @@ class AgenticOrchestrationTests(unittest.TestCase):
         self.assertTrue(merged["recovery_applied"])
         self.assertEqual(merged["recovery_queries"], ["study procedures benefits"])
 
+    def test_study_specific_personalization_enrichment_plan_is_study_scoped(self) -> None:
+        enrichment_plan = self.pipeline.orchestrator_agent.build_study_specific_personalization_enrichment_plan(
+            retrieval_plan={
+                "query": "generic consent query",
+                "top_k": 5,
+                "retrieval_mode": "hybrid",
+                "source_group_filters": ["regulatory_guidance", "trial_materials"],
+                "source_id_filters": ["nct03877237"],
+                "filter_logic": "union",
+            },
+            retrieval_artifacts={
+                "evidence_package": {
+                    "role_counts": {
+                        "study_specific": 0,
+                        "regulatory": 3,
+                        "other": 0,
+                    }
+                }
+            },
+        )
+
+        self.assertIsNotNone(enrichment_plan)
+        assert enrichment_plan is not None
+        self.assertEqual(enrichment_plan["source_group_filters"], ["trial_materials"])
+        self.assertEqual(enrichment_plan["source_id_filters"], ["nct03877237"])
+        self.assertEqual(enrichment_plan["filter_logic"], "intersection")
+        self.assertGreaterEqual(enrichment_plan["top_k"], 6)
+
     def test_handle_user_request_routes_draft_generation_to_personalization_path(self) -> None:
         payload = self.pipeline.handle_user_request(
             run_id=self.run_id,

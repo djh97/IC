@@ -1637,7 +1637,7 @@ class OrchestratorAgent(BaseAgent):
             "retrieval_mode": retrieval_plan.get("retrieval_mode", self.runtime.config.retrieval.retrieval_mode),
             "source_group_filters": ["trial_materials"],
             "source_id_filters": source_id_filters,
-            "filter_logic": "union",
+            "filter_logic": "intersection",
             "minimum_study_specific_hits": minimum_study_hits,
             "current_study_specific_hits": current_study_hits,
         }
