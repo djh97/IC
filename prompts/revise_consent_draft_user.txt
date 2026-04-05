@@ -19,6 +19,9 @@ ${recovery_targets_json}
 Focused recovery context:
 ${focused_recovery_context}
 
+Targeted revision guidance:
+${targeted_revision_guidance}
+
 Readability guidance:
 ${readability_guidance}
 

@@ -552,6 +552,45 @@ class PersonalizationAgent(BaseAgent):
     agent_label = "Personalization Agent"
     revision_max_tokens = 1536
 
+    def build_targeted_revision_guidance(
+        self,
+        *,
+        patient_profile: PatientProfile,
+        recovery_targets: list[dict[str, Any]] | None,
+        draft_audit: dict[str, Any],
+    ) -> str:
+        target_element_ids = {
+            str(target.get("element_id", "")).strip()
+            for target in (recovery_targets or [])
+            if isinstance(target, dict)
+        }
+        missing_element_ids = {
+            str(element_id).strip()
+            for element_id in (
+                list(draft_audit.get("missing_required_elements", []))
+                + list(draft_audit.get("missing_planned_required_elements", []))
+            )
+        }
+        guidance_lines: list[str] = []
+
+        if (
+            patient_profile.health_literacy == "low"
+            and "benefits" in target_element_ids
+            and "benefits" in missing_element_ids
+        ):
+            guidance_lines.extend(
+                [
+                    "For low-literacy benefits coverage, add one short standalone benefits sentence in the summary and the fuller draft.",
+                    "Prefer simple wording such as 'There may be no direct benefit to you [x].' or 'This study may not help you directly [x].' when that is what the evidence supports.",
+                    "Do not replace that benefits sentence with a vague line that only says the team will explain risks and benefits.",
+                ]
+            )
+
+        if not guidance_lines:
+            return "No extra targeted revision guidance was prepared."
+
+        return "\n".join(f"- {line}" for line in guidance_lines)
+
     def generate_draft(
         self,
         *,
@@ -784,6 +823,11 @@ class PersonalizationAgent(BaseAgent):
         study_specific_context = evidence_package["study_specific_context"] or "No study-specific context was available."
         regulatory_context = evidence_package["regulatory_context"] or "No regulatory context was available."
         other_context = evidence_package["other_context"] or "No additional grounding context was available."
+        targeted_revision_guidance = self.build_targeted_revision_guidance(
+            patient_profile=patient_profile,
+            recovery_targets=recovery_targets,
+            draft_audit=draft_audit,
+        )
 
         patient_profile_json = json.dumps(asdict(patient_profile), indent=2)
         user_prompt = self.tools.prompts.render(
@@ -796,6 +840,7 @@ class PersonalizationAgent(BaseAgent):
                 "draft_content_plan_json": json.dumps(draft_content_plan or {}, indent=2),
                 "recovery_targets_json": json.dumps(recovery_targets or [], indent=2),
                 "focused_recovery_context": focused_recovery_context or "No targeted recovery context was prepared.",
+                "targeted_revision_guidance": targeted_revision_guidance,
                 "readability_guidance": self.tools.retrieval.build_readability_guidance(patient_profile, task_type="draft"),
                 "study_specific_context": study_specific_context,
                 "regulatory_context": regulatory_context,
@@ -818,6 +863,7 @@ class PersonalizationAgent(BaseAgent):
             "draft_content_plan": draft_content_plan or {},
             "recovery_targets": recovery_targets or [],
             "focused_recovery_context": focused_recovery_context or "",
+            "targeted_revision_guidance": targeted_revision_guidance,
             "current_draft": current_draft,
             "top_k": top_k or self.runtime.config.retrieval.top_k,
             "retrieval_mode_used": retrieval_artifacts["mode_used"],
