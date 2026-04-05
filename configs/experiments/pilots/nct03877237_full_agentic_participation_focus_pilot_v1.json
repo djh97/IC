@@ -1,0 +1,31 @@
+{
+  "batch_id": "nct03877237_full_agentic_participation_focus_pilot_v1",
+  "base_run_id": "REPLACE_WITH_PREPARED_RUN_ID",
+  "reporting_role": "pilot",
+  "defaults": {
+    "template_file": "data/raw/examples/base_consent_template.txt",
+    "top_k": 6,
+    "generate_draft": true,
+    "formalize": true,
+    "retrieval_mode": "hybrid",
+    "retrieval_filter_logic": "union",
+    "retrieval_source_groups": [
+      "regulatory_guidance",
+      "trial_materials"
+    ],
+    "workflow_variant": "full_agentic"
+  },
+  "case_matrix": {
+    "study_source_ids": [
+      "nct03877237"
+    ],
+    "patient_profile_files": [
+      "configs/patient_profiles/example_us_low_literacy.json",
+      "configs/patient_profiles/example_us_medium_literacy.json"
+    ],
+    "question_set_files": [
+      "configs/question_sets/study_participation_basics.json"
+    ],
+    "notes": "Tiny Full Agentic participation-focused pilot for checking benefits, study procedures, alternatives, QA citation behavior, and recovery provenance after the post-run offline evaluator and revision-guidance fixes."
+  }
+}

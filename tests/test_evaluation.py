@@ -49,6 +49,27 @@ class DraftRevisionAuditTests(unittest.TestCase):
         self.assertTrue(required["alternatives"])
         self.assertTrue(required["withdrawal_rights"])
 
+    def test_study_procedures_match_explicit_participant_action_language(self) -> None:
+        required = evaluate_required_elements(
+            "If you join, you will walk for 6 minutes at the start and again at week 16."
+        )
+
+        self.assertTrue(required["study_procedures"])
+
+    def test_benefits_match_no_direct_benefit_language(self) -> None:
+        required = evaluate_required_elements(
+            "The study may help you understand how the drug works, but there is no guarantee of direct benefit."
+        )
+
+        self.assertTrue(required["benefits"])
+
+    def test_benefits_do_not_match_explain_benefits_phrase_alone(self) -> None:
+        required = evaluate_required_elements(
+            "The study team will explain risks and benefits before you decide whether to join."
+        )
+
+        self.assertFalse(required["benefits"])
+
     def test_audit_flags_missing_elements_and_low_citation_density(self) -> None:
         draft_summary = summarize_personalized_draft(
             {
@@ -97,6 +118,43 @@ class DraftRevisionAuditTests(unittest.TestCase):
         self.assertIn("planned_required_elements_missing", audit["issues"])
         self.assertIn("study_procedures", audit["missing_planned_required_elements"])
         self.assertIn("benefits", audit["missing_planned_required_elements"])
+        self.assertTrue(
+            any("direct benefit is not guaranteed" in target for target in audit["revision_targets"])
+        )
+
+    def test_audit_adds_explicit_alternatives_revision_target_when_missing(self) -> None:
+        draft_summary = summarize_personalized_draft(
+            {
+                "key_information_summary": "Joining is your choice [1].",
+                "key_information_citation_markers_used": ["[1]"],
+                "personalized_consent_text": (
+                    "Joining is your choice [1]. "
+                    "The study team will explain study steps [1]. "
+                    "Possible benefits are not guaranteed [1]."
+                ),
+                "citation_markers_used": ["[1]"],
+                "personalization_rationale": [],
+                "grounding_limitations": [],
+            },
+            available_markers=["[1]", "[2]"],
+            health_literacy="low",
+        )
+
+        audit = build_draft_revision_audit(
+            draft_summary,
+            draft_content_plan={
+                "elements": [
+                    {"element_id": "study_procedures", "status": "supported"},
+                    {"element_id": "benefits", "status": "supported"},
+                    {"element_id": "alternatives", "status": "supported"},
+                ]
+            },
+        )
+
+        self.assertIn("alternatives", audit["missing_planned_required_elements"])
+        self.assertTrue(
+            any("other treatment options or other choices besides joining" in target for target in audit["revision_targets"])
+        )
 
     def test_comparison_accepts_meaningfully_improved_revision(self) -> None:
         initial_summary = summarize_personalized_draft(

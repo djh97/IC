@@ -49,7 +49,14 @@ REQUIRED_ELEMENT_PATTERNS: dict[str, list[re.Pattern[str]]] = {
         re.compile(r"\bthe (study|research) (involves|includes)\b", re.IGNORECASE),
         re.compile(r"\bduring the study\b", re.IGNORECASE),
         re.compile(r"\byou will (have|attend|receive|take|complete|provide|undergo|be asked to|need to)\b", re.IGNORECASE),
+        re.compile(r"\byou will (walk|do|visit|return|come in|meet|use|wear)\b", re.IGNORECASE),
         re.compile(r"\bparticipants? will (have|attend|receive|take|complete|provide|undergo)\b", re.IGNORECASE),
+        re.compile(
+            r"\b(?:do|complete|take|undergo)\s+(?:a|an|the)?\s*"
+            r"(?:6-?minute walk test|walk test|questionnaires?|blood (?:sample|samples|test)|"
+            r"assessment|assessments|visits?|monitoring|follow-?up)\b",
+            re.IGNORECASE,
+        ),
         re.compile(r"\bregular (check-?ups|visits|monitoring|assessments)\b", re.IGNORECASE),
     ],
     "risks": [
@@ -60,10 +67,11 @@ REQUIRED_ELEMENT_PATTERNS: dict[str, list[re.Pattern[str]]] = {
         re.compile(r"\bpotential benefits?\b", re.IGNORECASE),
         re.compile(r"\bbenefits? of (the )?(study|research)\b", re.IGNORECASE),
         re.compile(r"\bhow (the )?study may help\b", re.IGNORECASE),
-        re.compile(r"\brisks? and benefits?\b", re.IGNORECASE),
-        re.compile(r"\bbenefits? and risks?\b", re.IGNORECASE),
         re.compile(r"\bthere (may be|is) no direct (medical )?benefit\b", re.IGNORECASE),
         re.compile(r"\bno direct (medical )?benefit\b", re.IGNORECASE),
+        re.compile(r"\bno guarantee of direct benefit\b", re.IGNORECASE),
+        re.compile(r"\bdirect benefit is not guaranteed\b", re.IGNORECASE),
+        re.compile(r"\bthere is no guarantee (?:that you will )?benefit directly\b", re.IGNORECASE),
         re.compile(r"\byou may not benefit directly\b", re.IGNORECASE),
         re.compile(r"\bthis (study|research) may help (future patients|others)\b", re.IGNORECASE),
         re.compile(r"\bmay help (future patients|others)\b", re.IGNORECASE),
@@ -642,6 +650,18 @@ def build_draft_revision_audit(
         revision_targets.append(
             "Do not omit planned study procedures, benefits, or alternatives when the content plan says they are supported."
         )
+        if "study_procedures" in missing_planned_required_elements:
+            revision_targets.append(
+                "Add one explicit participant-action sentence describing what the person would do in the study when the study evidence supports it."
+            )
+        if "benefits" in missing_planned_required_elements:
+            revision_targets.append(
+                "Add one explicit benefits sentence when supported, or say clearly that direct benefit is not guaranteed."
+            )
+        if "alternatives" in missing_planned_required_elements:
+            revision_targets.append(
+                "Add one explicit sentence stating that other treatment options or other choices besides joining may be available when the regulatory evidence supports it."
+            )
 
     return {
         "needs_revision": bool(issues),

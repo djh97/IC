@@ -37,6 +37,7 @@ Instructions:
 - Use the recovery targets as the highest-priority checklist when they are present.
 - Use the focused recovery context first for those recovery targets before falling back to the broader context.
 - If the draft content plan marks study procedures, benefits, or alternatives as supported or partially supported, do not drop them from the fuller draft during simplification.
+- If alternatives is supported or partially supported, include one explicit sentence stating that other treatment options or other choices besides joining may be available when the evidence supports it.
 - Focus first on the listed missing consent topics and weak citation coverage.
 - Keep grounded sentences that are already correct unless they need simplification or better citation placement.
 - If the current draft already covers a topic, prefer simplifying or tightening it instead of adding another sentence about the same point.

@@ -70,6 +70,38 @@ def build_hf_client(runtime_config: HuggingFaceRuntimeConfig | None = None) -> I
     )
 
 
+def describe_request_exception(exc: requests.exceptions.RequestException) -> str:
+    parts: list[str] = [type(exc).__name__]
+    message = str(exc).strip()
+    if message:
+        parts.append(message)
+
+    request = getattr(exc, "request", None)
+    request_url = getattr(request, "url", None)
+    if request_url:
+        parts.append(f"url={request_url}")
+
+    response = getattr(exc, "response", None)
+    if response is not None:
+        status_code = getattr(response, "status_code", None)
+        if status_code is not None:
+            parts.append(f"status={status_code}")
+        response_url = getattr(response, "url", None)
+        if response_url and response_url != request_url:
+            parts.append(f"response_url={response_url}")
+        try:
+            response_text = str(getattr(response, "text", "") or "").strip()
+        except Exception:  # pragma: no cover - defensive fallback for odd response wrappers
+            response_text = ""
+        if response_text:
+            preview = response_text.replace("\r", " ").replace("\n", " ")
+            if len(preview) > 200:
+                preview = preview[:197] + "..."
+            parts.append(f"body={preview}")
+
+    return " | ".join(parts)
+
+
 def chat_json(
     messages: list[dict[str, str]],
     schema_name: str,
@@ -107,8 +139,11 @@ def chat_json(
         except requests.exceptions.RequestException as exc:
             last_exception = exc
             if attempt == 3:
+                endpoint_label = runtime_config.endpoint_url or runtime_config.model_id
                 raise RuntimeError(
-                    f"Hugging Face endpoint request failed after {attempt} attempts."
+                    "Hugging Face endpoint request failed after "
+                    f"{attempt} attempts. endpoint={endpoint_label} "
+                    f"model={runtime_config.model_id} error={describe_request_exception(exc)}"
                 ) from exc
             time.sleep(2 * attempt)
     else:  # pragma: no cover - defensive fallback
