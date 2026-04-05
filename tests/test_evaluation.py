@@ -63,6 +63,13 @@ class DraftRevisionAuditTests(unittest.TestCase):
 
         self.assertTrue(required["benefits"])
 
+    def test_benefits_match_may_not_directly_benefit_you_language(self) -> None:
+        required = evaluate_required_elements(
+            "This study may help doctors understand better treatments for heart failure, but it may not directly benefit you."
+        )
+
+        self.assertTrue(required["benefits"])
+
     def test_benefits_do_not_match_explain_benefits_phrase_alone(self) -> None:
         required = evaluate_required_elements(
             "The study team will explain risks and benefits before you decide whether to join."
@@ -120,6 +127,9 @@ class DraftRevisionAuditTests(unittest.TestCase):
         self.assertIn("benefits", audit["missing_planned_required_elements"])
         self.assertTrue(
             any("direct benefit is not guaranteed" in target for target in audit["revision_targets"])
+        )
+        self.assertTrue(
+            any("does not satisfy benefits coverage" in target or "do not treat" in target for target in audit["revision_targets"])
         )
 
     def test_audit_adds_explicit_alternatives_revision_target_when_missing(self) -> None:

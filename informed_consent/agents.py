@@ -205,7 +205,7 @@ DRAFT_PLAN_INSTRUCTIONS: dict[str, str] = {
     "voluntary_participation": "State clearly that participation is voluntary and that the participant can choose whether to join.",
     "study_procedures": "Explain what the participant would do in this study using concrete study-specific steps when the evidence supports them.",
     "risks": "Mention possible study risks or say that risks will be explained before joining if the evidence is general.",
-    "benefits": "Describe possible benefits or clearly say that direct benefit is not guaranteed when that is what the evidence supports.",
+    "benefits": "Describe possible benefits or clearly say that direct benefit is not guaranteed when that is what the evidence supports. Do not rely on a sentence that only says the team will explain benefits.",
     "alternatives": "Mention alternatives or other options if the regulatory evidence supports that statement.",
     "questions": "Tell the participant they can ask questions and contact the study team when they need help.",
     "withdrawal_rights": "Explain that the participant may stop later or withdraw without penalty when the evidence supports it.",

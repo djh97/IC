@@ -68,11 +68,15 @@ REQUIRED_ELEMENT_PATTERNS: dict[str, list[re.Pattern[str]]] = {
         re.compile(r"\bbenefits? of (the )?(study|research)\b", re.IGNORECASE),
         re.compile(r"\bhow (the )?study may help\b", re.IGNORECASE),
         re.compile(r"\bthere (may be|is) no direct (medical )?benefit\b", re.IGNORECASE),
+        re.compile(r"\bthere (?:may be|is) no direct (medical )?benefit to you\b", re.IGNORECASE),
         re.compile(r"\bno direct (medical )?benefit\b", re.IGNORECASE),
+        re.compile(r"\bno direct (medical )?benefit to you\b", re.IGNORECASE),
         re.compile(r"\bno guarantee of direct benefit\b", re.IGNORECASE),
         re.compile(r"\bdirect benefit is not guaranteed\b", re.IGNORECASE),
         re.compile(r"\bthere is no guarantee (?:that you will )?benefit directly\b", re.IGNORECASE),
         re.compile(r"\byou may not benefit directly\b", re.IGNORECASE),
+        re.compile(r"\b(?:it|this study|the study) may not directly benefit you\b", re.IGNORECASE),
+        re.compile(r"\b(?:it|this study|the study) might not directly benefit you\b", re.IGNORECASE),
         re.compile(r"\bthis (study|research) may help (future patients|others)\b", re.IGNORECASE),
         re.compile(r"\bmay help (future patients|others)\b", re.IGNORECASE),
         re.compile(r"\bpossible benefit\b", re.IGNORECASE),
@@ -656,7 +660,7 @@ def build_draft_revision_audit(
             )
         if "benefits" in missing_planned_required_elements:
             revision_targets.append(
-                "Add one explicit benefits sentence when supported, or say clearly that direct benefit is not guaranteed."
+                "Add one explicit benefits sentence when supported, or say clearly that direct benefit is not guaranteed; do not treat 'the team will explain risks and benefits' as enough."
             )
         if "alternatives" in missing_planned_required_elements:
             revision_targets.append(
