@@ -134,6 +134,90 @@ class AgenticOrchestrationTests(unittest.TestCase):
         self.assertIn(("Orchestrator Agent", "Conversational Agent"), handoff_pairs)
         self.assertIn(("Conversational Agent", "Orchestrator Agent"), handoff_pairs)
 
+    def test_revise_draft_caps_revision_output_budget(self) -> None:
+        patient_profile = self.pipeline.load_patient_profile(self.patient_profile_path)
+        retrieval_hits = [
+            {
+                "source_id": "nct03877237",
+                "chunk_id": "study-1",
+                "rank": 1,
+                "score": 0.9,
+                "citation_label": "Target Study",
+                "excerpt": "Participants will take dapagliflozin and complete a 6-minute walk test.",
+                "metadata": {"source_group": "trial_materials"},
+            },
+            {
+                "source_id": "common_rule_2018_july",
+                "chunk_id": "reg-1",
+                "rank": 2,
+                "score": 0.8,
+                "citation_label": "Common Rule",
+                "excerpt": "Alternative options may be available and participation is voluntary.",
+                "metadata": {"source_group": "regulatory_guidance"},
+            },
+        ]
+        retrieval_artifacts = {
+            "mode_used": "hybrid",
+            "dense_available": True,
+            "source_group_filters": ["trial_materials", "regulatory_guidance"],
+            "source_id_filters": ["nct03877237"],
+            "filter_logic_used": "intersection",
+            "filtered_chunk_count": len(retrieval_hits),
+            "lexical_hits": [],
+            "dense_hits": [],
+            "retrieval_hits": retrieval_hits,
+            "evidence_package": self.pipeline.build_role_separated_evidence_package(retrieval_hits),
+            "scoped_retrieval_strategy": "study_plus_regulatory_split",
+        }
+
+        with patch(
+            "informed_consent.agent_tools.GenerationTools.call_json_model",
+            return_value={
+                "key_information_summary": "You can choose to join [1].",
+                "key_information_citation_markers_used": ["[1]"],
+                "personalized_consent_text": "You can choose to join [1]. Other options may be available [2].",
+                "citation_markers_used": ["[1]", "[2]"],
+                "personalization_rationale": [],
+                "grounding_limitations": [],
+            },
+        ) as mock_call:
+            self.pipeline.personalization_agent.revise_draft(
+                run_id=self.run_id,
+                patient_profile=patient_profile,
+                patient_profile_path=self.patient_profile_path,
+                base_template_text=self.template_path.read_text(encoding="utf-8"),
+                template_path=self.template_path,
+                generation_query="study procedures benefits alternatives",
+                retrieval_artifacts=retrieval_artifacts,
+                current_draft={
+                    "key_information_summary": "You can choose to join.",
+                    "key_information_citation_markers_used": [],
+                    "personalized_consent_text": "You can choose to join.",
+                    "citation_markers_used": [],
+                    "personalization_rationale": [],
+                    "grounding_limitations": [],
+                },
+                draft_audit={
+                    "issues": ["planned_required_elements_missing"],
+                    "missing_required_elements": ["benefits", "alternatives"],
+                },
+                draft_content_plan={
+                    "elements": [
+                        {"element_id": "benefits", "status": "partially_supported"},
+                        {"element_id": "alternatives", "status": "supported"},
+                    ]
+                },
+                recovery_targets=[],
+                focused_recovery_context="Focused recovery context.",
+                top_k=6,
+                retrieval_mode="hybrid",
+                source_group_filters=["trial_materials", "regulatory_guidance"],
+                source_id_filters=["nct03877237"],
+                dry_run=False,
+            )
+
+        self.assertEqual(mock_call.call_args.kwargs["max_tokens"], 1536)
+
     def test_agents_receive_scoped_toolsets(self) -> None:
         self.assertTrue(hasattr(self.pipeline.orchestrator_agent.tools, "evaluation"))
         self.assertTrue(hasattr(self.pipeline.orchestrator_agent.tools, "generation"))

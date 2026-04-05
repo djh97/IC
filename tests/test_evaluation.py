@@ -70,6 +70,13 @@ class DraftRevisionAuditTests(unittest.TestCase):
 
         self.assertTrue(required["benefits"])
 
+    def test_benefits_match_cannot_say_for_sure_direct_benefit_language(self) -> None:
+        required = evaluate_required_elements(
+            "There may be benefits, but we can't say for sure if you'll get direct benefit."
+        )
+
+        self.assertTrue(required["benefits"])
+
     def test_benefits_do_not_match_explain_benefits_phrase_alone(self) -> None:
         required = evaluate_required_elements(
             "The study team will explain risks and benefits before you decide whether to join."

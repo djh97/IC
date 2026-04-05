@@ -77,6 +77,10 @@ REQUIRED_ELEMENT_PATTERNS: dict[str, list[re.Pattern[str]]] = {
         re.compile(r"\byou may not benefit directly\b", re.IGNORECASE),
         re.compile(r"\b(?:it|this study|the study) may not directly benefit you\b", re.IGNORECASE),
         re.compile(r"\b(?:it|this study|the study) might not directly benefit you\b", re.IGNORECASE),
+        re.compile(
+            r"\b(?:we\s+)?can(?:not|['’]t)\s+say for sure(?: if)?\s+you(?:['’]ll| will)?\s*get direct benefit\b",
+            re.IGNORECASE,
+        ),
         re.compile(r"\bthis (study|research) may help (future patients|others)\b", re.IGNORECASE),
         re.compile(r"\bmay help (future patients|others)\b", re.IGNORECASE),
         re.compile(r"\bpossible benefit\b", re.IGNORECASE),

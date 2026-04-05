@@ -550,6 +550,7 @@ class RAGAgent(BaseAgent):
 
 class PersonalizationAgent(BaseAgent):
     agent_label = "Personalization Agent"
+    revision_max_tokens = 1536
 
     def generate_draft(
         self,
@@ -852,7 +853,7 @@ class PersonalizationAgent(BaseAgent):
                 schema_name="personalized_consent_draft_revision",
                 schema=PERSONALIZED_CONSENT_DRAFT_SCHEMA,
                 temperature=self.runtime.config.models.temperature,
-                max_tokens=self.runtime.config.models.max_tokens,
+                max_tokens=min(self.runtime.config.models.max_tokens, self.revision_max_tokens),
             )
             response_payload = self.tools.state.normalize_personalized_draft_response(raw_response_payload)
             raw_output_path = str(outputs_dir / "personalized_consent_draft.revision.raw.json")
