@@ -8,8 +8,10 @@ from pathlib import Path
 from informed_consent.evaluation import (
     build_draft_revision_audit,
     compare_draft_revision_candidates,
+    evaluate_required_elements,
     evaluate_run_outputs,
     sentence_citation_metrics,
+    should_flag_overconfident_answer,
     summarize_personalized_draft,
 )
 
@@ -30,6 +32,23 @@ class SentenceCitationMetricsTests(unittest.TestCase):
 
 
 class DraftRevisionAuditTests(unittest.TestCase):
+    def test_required_element_patterns_match_participant_facing_phrasing(self) -> None:
+        required = evaluate_required_elements(
+            (
+                "Taking part is your choice. "
+                "The study involves regular visits and you will complete questionnaires. "
+                "There may be no direct medical benefit, but the study may help future patients. "
+                "Other treatment options are available instead of joining this study. "
+                "You can leave the study at any time."
+            )
+        )
+
+        self.assertTrue(required["voluntary_participation"])
+        self.assertTrue(required["study_procedures"])
+        self.assertTrue(required["benefits"])
+        self.assertTrue(required["alternatives"])
+        self.assertTrue(required["withdrawal_rights"])
+
     def test_audit_flags_missing_elements_and_low_citation_density(self) -> None:
         draft_summary = summarize_personalized_draft(
             {
@@ -206,6 +225,124 @@ class DraftRevisionAuditTests(unittest.TestCase):
 
         self.assertFalse(comparison["accept_revision"])
         self.assertIn("revision_lost_planned_required_elements", comparison["reasons"])
+
+    def test_comparison_rejects_citation_only_revision_when_planned_elements_still_missing(self) -> None:
+        initial_summary = summarize_personalized_draft(
+            {
+                "key_information_summary": "You can choose to join [1].",
+                "key_information_citation_markers_used": ["[1]"],
+                "personalized_consent_text": "You can choose to join [1]. You may ask questions [1].",
+                "citation_markers_used": ["[1]"],
+                "personalization_rationale": [],
+                "grounding_limitations": [],
+            },
+            available_markers=["[1]", "[2]"],
+            health_literacy="low",
+        )
+        revised_summary = summarize_personalized_draft(
+            {
+                "key_information_summary": "You can choose to join [1]. You may ask questions [2].",
+                "key_information_citation_markers_used": ["[1]", "[2]"],
+                "personalized_consent_text": "You can choose to join [1]. You may ask questions [2].",
+                "citation_markers_used": ["[1]", "[2]"],
+                "personalization_rationale": [],
+                "grounding_limitations": [],
+            },
+            available_markers=["[1]", "[2]"],
+            health_literacy="low",
+        )
+
+        comparison = compare_draft_revision_candidates(
+            initial_summary,
+            revised_summary,
+            initial_audit={"missing_planned_required_elements": ["study_procedures", "benefits"]},
+            revised_audit={"missing_planned_required_elements": ["study_procedures", "benefits"]},
+        )
+
+        self.assertFalse(comparison["accept_revision"])
+        self.assertIn("revision_did_not_improve_planned_completeness", comparison["reasons"])
+
+    def test_comparison_accepts_revision_that_recovers_planned_elements_with_modest_citation_change(self) -> None:
+        initial_summary = summarize_personalized_draft(
+            {
+                "key_information_summary": "You can choose to join [1].",
+                "key_information_citation_markers_used": ["[1]"],
+                "personalized_consent_text": "You can choose to join [1]. You may ask questions [1].",
+                "citation_markers_used": ["[1]"],
+                "personalization_rationale": [],
+                "grounding_limitations": [],
+            },
+            available_markers=["[1]", "[2]"],
+            health_literacy="low",
+        )
+        revised_summary = summarize_personalized_draft(
+            {
+                "key_information_summary": "You can choose to join [1].",
+                "key_information_citation_markers_used": ["[1]"],
+                "personalized_consent_text": (
+                    "You can choose to join [1]. "
+                    "The study involves visits and tests [2]. "
+                    "You may not benefit directly [2]. "
+                    "Other treatment options are available [2]."
+                ),
+                "citation_markers_used": ["[1]", "[2]"],
+                "personalization_rationale": [],
+                "grounding_limitations": [],
+            },
+            available_markers=["[1]", "[2]"],
+            health_literacy="low",
+        )
+
+        comparison = compare_draft_revision_candidates(
+            initial_summary,
+            revised_summary,
+            initial_audit={"missing_planned_required_elements": ["study_procedures", "benefits", "alternatives"]},
+            revised_audit={"missing_planned_required_elements": []},
+        )
+
+        self.assertTrue(comparison["accept_revision"])
+        self.assertIn("planned_required_elements_recovered", comparison["reasons"])
+
+
+class OverconfidenceHeuristicTests(unittest.TestCase):
+    def test_grounded_cited_answer_is_not_flagged_overconfident(self) -> None:
+        flagged = should_flag_overconfident_answer(
+            answer_text="This study tests a drug in adults with heart failure [1].",
+            uncertainty_noted=False,
+            unsupported_claim_risk=False,
+            study_specific_grounding_gap=False,
+            grounding_gap_declared=False,
+            unsupported_marker_count=0,
+            unsupported_sentence_count=0,
+        )
+
+        self.assertFalse(flagged)
+
+    def test_unsupported_ungrounded_confident_answer_is_flagged_overconfident(self) -> None:
+        flagged = should_flag_overconfident_answer(
+            answer_text="This study will require weekly visits and a new drug.",
+            uncertainty_noted=False,
+            unsupported_claim_risk=True,
+            study_specific_grounding_gap=True,
+            grounding_gap_declared=False,
+            unsupported_marker_count=0,
+            unsupported_sentence_count=1,
+        )
+
+        self.assertTrue(flagged)
+
+    def test_grounding_gap_without_limitation_increases_overconfidence_risk(self) -> None:
+        flagged = should_flag_overconfident_answer(
+            answer_text="You will have several study visits.",
+            uncertainty_noted=False,
+            unsupported_claim_risk=True,
+            study_specific_grounding_gap=True,
+            grounding_gap_declared=False,
+            unsupported_marker_count=0,
+            unsupported_sentence_count=1,
+        )
+
+        self.assertTrue(flagged)
 
 
 class EvaluationOutputTests(unittest.TestCase):

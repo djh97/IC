@@ -1883,7 +1883,10 @@ class OrchestratorAgent(BaseAgent):
 
         targets: list[dict[str, Any]] = []
         preferred_groups: list[str] = []
-        query_hints: list[str] = []
+        study_query_hints: list[str] = []
+        regulatory_query_hints: list[str] = []
+        study_targets: list[dict[str, Any]] = []
+        regulatory_targets: list[dict[str, Any]] = []
         for item in plan_elements:
             if not isinstance(item, dict):
                 continue
@@ -1896,11 +1899,14 @@ class OrchestratorAgent(BaseAgent):
             preferred_role = str(item.get("preferred_source_role", "none")).strip() or "none"
             if preferred_role == "study_specific":
                 preferred_groups.append("trial_materials")
+                study_query_hints.append(ELEMENT_RECOVERY_QUERY_HINTS.get(element_id, element_id.replace("_", " ")))
             elif preferred_role == "regulatory":
                 preferred_groups.append("regulatory_guidance")
+                regulatory_query_hints.append(ELEMENT_RECOVERY_QUERY_HINTS.get(element_id, element_id.replace("_", " ")))
             elif preferred_role == "both":
                 preferred_groups.extend(["trial_materials", "regulatory_guidance"])
-            query_hints.append(ELEMENT_RECOVERY_QUERY_HINTS.get(element_id, element_id.replace("_", " ")))
+                study_query_hints.append(ELEMENT_RECOVERY_QUERY_HINTS.get(element_id, element_id.replace("_", " ")))
+                regulatory_query_hints.append(ELEMENT_RECOVERY_QUERY_HINTS.get(element_id, element_id.replace("_", " ")))
             targets.append(
                 {
                     "element_id": element_id,
@@ -1910,26 +1916,72 @@ class OrchestratorAgent(BaseAgent):
                     "instruction": str(item.get("instruction", "")).strip(),
                 }
             )
+            if preferred_role in {"study_specific", "both"}:
+                study_targets.append(targets[-1])
+            if preferred_role in {"regulatory", "both"}:
+                regulatory_targets.append(targets[-1])
 
         if not targets:
             return None
 
         deduped_preferred_groups = list(dict.fromkeys(preferred_groups))
-        source_group_filters = deduped_preferred_groups or list(retrieval_plan.get("source_group_filters", []))
-        query_parts = [
-            str(retrieval_plan.get("query", "")).strip(),
-            " | ".join(query_hints),
-        ]
-        query = " | ".join(part for part in query_parts if part)
+        top_k = max(int(retrieval_plan.get("top_k", self.runtime.config.retrieval.top_k)), 6)
+        retrieval_mode = retrieval_plan.get("retrieval_mode", self.runtime.config.retrieval.retrieval_mode)
+        base_query = str(retrieval_plan.get("query", "")).strip()
+        retrieval_passes: list[dict[str, Any]] = []
+
+        if study_targets:
+            study_query = " | ".join(
+                part for part in (base_query, " | ".join(dict.fromkeys(study_query_hints))) if part
+            )
+            retrieval_passes.append(
+                {
+                    "pass_label": "study_specific",
+                    "preferred_source_role": "study_specific",
+                    "query": study_query,
+                    "top_k": top_k,
+                    "retrieval_mode": retrieval_mode,
+                    "source_group_filters": ["trial_materials"],
+                    "source_id_filters": list(retrieval_plan.get("source_id_filters", [])),
+                    "filter_logic": "intersection",
+                    "target_elements": [dict(item) for item in study_targets],
+                }
+            )
+
+        if regulatory_targets:
+            regulatory_query = " | ".join(
+                part for part in (base_query, " | ".join(dict.fromkeys(regulatory_query_hints))) if part
+            )
+            retrieval_passes.append(
+                {
+                    "pass_label": "regulatory",
+                    "preferred_source_role": "regulatory",
+                    "query": regulatory_query,
+                    "top_k": top_k,
+                    "retrieval_mode": retrieval_mode,
+                    "source_group_filters": ["regulatory_guidance"],
+                    "source_id_filters": [],
+                    "filter_logic": "intersection",
+                    "target_elements": [dict(item) for item in regulatory_targets],
+                }
+            )
+
+        if not retrieval_passes:
+            return None
+
+        primary_pass = retrieval_passes[0]
+        retrieval_strategy_effective = "split_passes" if len(retrieval_passes) > 1 else f"{primary_pass['pass_label']}_single_pass"
         return {
             "target_elements": targets,
-            "query": query,
-            "top_k": max(int(retrieval_plan.get("top_k", self.runtime.config.retrieval.top_k)), 6),
-            "retrieval_mode": retrieval_plan.get("retrieval_mode", self.runtime.config.retrieval.retrieval_mode),
-            "source_group_filters": source_group_filters,
-            "source_id_filters": list(retrieval_plan.get("source_id_filters", [])),
-            "filter_logic": retrieval_plan.get("filter_logic", "union"),
+            "query": primary_pass["query"],
+            "top_k": top_k,
+            "retrieval_mode": retrieval_mode,
+            "source_group_filters": list(primary_pass["source_group_filters"]),
+            "source_id_filters": list(primary_pass["source_id_filters"]),
+            "filter_logic": primary_pass["filter_logic"],
             "preferred_source_groups": deduped_preferred_groups,
+            "retrieval_strategy_effective": retrieval_strategy_effective,
+            "retrieval_passes": retrieval_passes,
         }
 
     def merge_retrieval_artifacts(
@@ -1938,6 +1990,15 @@ class OrchestratorAgent(BaseAgent):
         primary_artifacts: dict[str, Any],
         recovery_artifacts: dict[str, Any],
     ) -> dict[str, Any]:
+        merged_queries: list[str] = []
+        for value in list(primary_artifacts.get("recovery_queries", [])) + list(recovery_artifacts.get("recovery_queries", [])):
+            query = str(value or "").strip()
+            if query and query not in merged_queries:
+                merged_queries.append(query)
+        recovery_query = str(recovery_artifacts.get("query", "")).strip()
+        if recovery_query and recovery_query not in merged_queries:
+            merged_queries.append(recovery_query)
+
         merged_hits: list[dict[str, Any]] = []
         seen_chunk_ids: set[str] = set()
         for index, hit in enumerate(
@@ -1964,7 +2025,7 @@ class OrchestratorAgent(BaseAgent):
             "evidence_package": evidence_package,
             "recovery_applied": True,
             "recovery_hit_count": len(recovery_artifacts.get("retrieval_hits", [])),
-            "recovery_queries": [recovery_artifacts.get("query")] if recovery_artifacts.get("query") else [],
+            "recovery_queries": merged_queries,
         }
 
     def plan_question_grounding_fallback(
@@ -2583,36 +2644,78 @@ class OrchestratorAgent(BaseAgent):
                 if recovery_plan:
                     recovery_started_at = utc_now_iso()
                     recovery_targets = list(recovery_plan["target_elements"])
+                    recovery_passes = list(recovery_plan.get("retrieval_passes", []))
+                    if not recovery_passes:
+                        recovery_passes = [
+                            {
+                                "pass_label": "recovery",
+                                "preferred_source_role": "study_specific",
+                                "query": recovery_plan["query"],
+                                "top_k": recovery_plan["top_k"],
+                                "retrieval_mode": recovery_plan["retrieval_mode"],
+                                "source_group_filters": recovery_plan["source_group_filters"],
+                                "source_id_filters": recovery_plan["source_id_filters"],
+                                "filter_logic": recovery_plan["filter_logic"],
+                                "target_elements": recovery_targets,
+                            }
+                        ]
                     recovery_plan_file = self.tools.artifacts.run_path(run_id, "outputs", "draft_element_recovery_plan.json")
                     self.tools.artifacts.write_json(recovery_plan_file, recovery_plan)
                     recovery_plan_path = str(recovery_plan_file)
-                    recovery_request_handoff = self.emit_handoff(
-                        run_id,
-                        to_agent=self.rag_agent.agent_label,
-                        purpose="draft_element_recovery_grounding_request",
-                        payload={
-                            "query": recovery_plan["query"],
-                            "target_elements": recovery_targets,
-                            "top_k": recovery_plan["top_k"],
-                            "retrieval_mode": recovery_plan["retrieval_mode"],
-                            "source_group_filters": recovery_plan["source_group_filters"],
-                            "source_id_filters": recovery_plan["source_id_filters"],
-                            "filter_logic": recovery_plan["filter_logic"],
-                        },
-                    )
-                    recovery_request_handoff_path = recovery_request_handoff["path"]
-                    recovery_retrieval = self.rag_agent.retrieve_evidence(
-                        run_id=run_id,
-                        query=recovery_plan["query"],
-                        top_k=recovery_plan["top_k"],
-                        retrieval_mode=recovery_plan["retrieval_mode"],
-                        source_group_filters=recovery_plan["source_group_filters"],
-                        source_id_filters=recovery_plan["source_id_filters"],
-                        filter_logic=recovery_plan["filter_logic"],
-                        purpose="draft_element_recovery_grounding",
-                        emit_result_to=self.agent_label,
-                    )
-                    recovery_result_handoff_path = recovery_retrieval.get("result_handoff_path")
+                    recovery_request_handoff_paths: list[str] = []
+                    recovery_result_handoff_paths: list[str] = []
+                    recovery_pass_hit_paths: list[str] = []
+                    recovery_retrieval: dict[str, Any] | None = None
+                    for recovery_pass in recovery_passes:
+                        pass_label = str(recovery_pass.get("pass_label") or "recovery").strip() or "recovery"
+                        pass_targets = list(recovery_pass.get("target_elements", []))
+                        recovery_request_handoff = self.emit_handoff(
+                            run_id,
+                            to_agent=self.rag_agent.agent_label,
+                            purpose=f"draft_element_recovery_grounding_request_{pass_label}",
+                            payload={
+                                "query": recovery_pass["query"],
+                                "target_elements": pass_targets,
+                                "top_k": recovery_pass["top_k"],
+                                "retrieval_mode": recovery_pass["retrieval_mode"],
+                                "source_group_filters": recovery_pass["source_group_filters"],
+                                "source_id_filters": recovery_pass["source_id_filters"],
+                                "filter_logic": recovery_pass["filter_logic"],
+                                "retrieval_strategy_effective": recovery_plan.get("retrieval_strategy_effective"),
+                            },
+                        )
+                        recovery_request_handoff_paths.append(recovery_request_handoff["path"])
+                        pass_artifacts = self.rag_agent.retrieve_evidence(
+                            run_id=run_id,
+                            query=recovery_pass["query"],
+                            top_k=recovery_pass["top_k"],
+                            retrieval_mode=recovery_pass["retrieval_mode"],
+                            source_group_filters=recovery_pass["source_group_filters"],
+                            source_id_filters=recovery_pass["source_id_filters"],
+                            filter_logic=recovery_pass["filter_logic"],
+                            purpose=f"draft_element_recovery_grounding_{pass_label}",
+                            emit_result_to=self.agent_label,
+                        )
+                        recovery_result_handoff_paths.append(pass_artifacts.get("result_handoff_path"))
+                        pass_artifacts["recovery_queries"] = [recovery_pass["query"]]
+                        pass_hits_file = self.tools.artifacts.run_path(
+                            run_id,
+                            "outputs",
+                            f"draft_element_recovery_{pass_label}_hits.json",
+                        )
+                        self.tools.artifacts.write_json(pass_hits_file, pass_artifacts["retrieval_hits"])
+                        recovery_pass_hit_paths.append(str(pass_hits_file))
+                        if recovery_retrieval is None:
+                            recovery_retrieval = pass_artifacts
+                        else:
+                            recovery_retrieval = self.merge_retrieval_artifacts(
+                                primary_artifacts=recovery_retrieval,
+                                recovery_artifacts=pass_artifacts,
+                            )
+
+                    assert recovery_retrieval is not None
+                    recovery_request_handoff_path = recovery_request_handoff_paths[0] if recovery_request_handoff_paths else None
+                    recovery_result_handoff_path = recovery_result_handoff_paths[0] if recovery_result_handoff_paths else None
                     revision_retrieval_artifacts = self.merge_retrieval_artifacts(
                         primary_artifacts=retrieval_artifacts,
                         recovery_artifacts=recovery_retrieval,
@@ -2645,8 +2748,22 @@ class OrchestratorAgent(BaseAgent):
                         inputs={
                             "query": recovery_plan["query"],
                             "target_elements": [item["element_id"] for item in recovery_targets],
-                            "source_group_filters": recovery_plan["source_group_filters"],
-                            "source_id_filters": recovery_plan["source_id_filters"],
+                            "retrieval_strategy_effective": recovery_plan.get("retrieval_strategy_effective"),
+                            "retrieval_passes": [
+                                {
+                                    "pass_label": item.get("pass_label"),
+                                    "preferred_source_role": item.get("preferred_source_role"),
+                                    "source_group_filters": item.get("source_group_filters"),
+                                    "source_id_filters": item.get("source_id_filters"),
+                                    "filter_logic": item.get("filter_logic"),
+                                    "target_element_ids": [
+                                        str(target.get("element_id") or "").strip()
+                                        for target in item.get("target_elements", [])
+                                        if isinstance(target, dict)
+                                    ],
+                                }
+                                for item in recovery_passes
+                            ],
                         },
                         outputs={
                             "recovery_plan_path": recovery_plan_path,
@@ -2655,8 +2772,11 @@ class OrchestratorAgent(BaseAgent):
                             "recovery_evidence_package_path": recovery_evidence_package_path,
                             "recovery_request_handoff_path": recovery_request_handoff_path,
                             "recovery_result_handoff_path": recovery_result_handoff_path,
+                            "recovery_request_handoff_paths": recovery_request_handoff_paths,
+                            "recovery_result_handoff_paths": recovery_result_handoff_paths,
+                            "recovery_pass_hit_paths": recovery_pass_hit_paths,
                         },
-                        notes="The orchestrator issued a targeted retrieval pass to recover missing planned draft elements before revision.",
+                        notes="The orchestrator issued targeted scoped recovery retrieval before revision, using separate study-specific and regulatory passes when needed.",
                     )
 
                 revision_handoff = self.emit_handoff(
@@ -2706,7 +2826,7 @@ class OrchestratorAgent(BaseAgent):
                         revised_audit = self.audit_draft_quality(
                             run_id=run_id,
                             draft_payload=revised_response,
-                            retrieval_hits=retrieval_artifacts["retrieval_hits"],
+                            retrieval_hits=revision_retrieval_artifacts["retrieval_hits"],
                             patient_profile=patient_profile,
                             label="revision",
                             draft_content_plan=draft_content_plan,

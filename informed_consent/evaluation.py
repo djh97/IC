@@ -15,6 +15,11 @@ UNCERTAINTY_PATTERN = re.compile(
     r"\b(insufficient|uncertain|not enough|not specified|not provided|not available|cannot tell|can't tell|do not know|unknown|not supported)\b",
     re.IGNORECASE,
 )
+ASSERTIVE_QA_PATTERN = re.compile(
+    r"\b(?:this study|the study|participants?|you)\s+"
+    r"(?:tests?|includes?|involves?|requires?|will|would|must|can|may need to|may be asked to|have to|need to)\b",
+    re.IGNORECASE,
+)
 
 DRAFT_REQUIRED_ELEMENT_THRESHOLD = 0.7
 DRAFT_SENTENCE_CITATION_THRESHOLD = 0.5
@@ -31,11 +36,21 @@ REQUIRED_ELEMENT_PATTERNS: dict[str, list[re.Pattern[str]]] = {
         re.compile(r"\bchoose whether to (join|take part)\b", re.IGNORECASE),
         re.compile(r"\btaking part is your choice\b", re.IGNORECASE),
         re.compile(r"\bjoining (the )?study is your choice\b", re.IGNORECASE),
+        re.compile(r"\bparticipation is voluntary\b", re.IGNORECASE),
+        re.compile(r"\byou do not have to (join|take part|participate)\b", re.IGNORECASE),
+        re.compile(r"\byou can choose not to (join|take part|participate)\b", re.IGNORECASE),
+        re.compile(r"\bit is up to you whether to (join|take part|participate)\b", re.IGNORECASE),
     ],
     "study_procedures": [
         re.compile(r"\bstudy procedures?\b", re.IGNORECASE),
         re.compile(r"\bstudy steps\b", re.IGNORECASE),
         re.compile(r"\bstudy visits?\b", re.IGNORECASE),
+        re.compile(r"\bstudy visits? include\b", re.IGNORECASE),
+        re.compile(r"\bthe (study|research) (involves|includes)\b", re.IGNORECASE),
+        re.compile(r"\bduring the study\b", re.IGNORECASE),
+        re.compile(r"\byou will (have|attend|receive|take|complete|provide|undergo|be asked to|need to)\b", re.IGNORECASE),
+        re.compile(r"\bparticipants? will (have|attend|receive|take|complete|provide|undergo)\b", re.IGNORECASE),
+        re.compile(r"\bregular (check-?ups|visits|monitoring|assessments)\b", re.IGNORECASE),
     ],
     "risks": [
         re.compile(r"\brisks?\b", re.IGNORECASE),
@@ -47,10 +62,23 @@ REQUIRED_ELEMENT_PATTERNS: dict[str, list[re.Pattern[str]]] = {
         re.compile(r"\bhow (the )?study may help\b", re.IGNORECASE),
         re.compile(r"\brisks? and benefits?\b", re.IGNORECASE),
         re.compile(r"\bbenefits? and risks?\b", re.IGNORECASE),
+        re.compile(r"\bthere (may be|is) no direct (medical )?benefit\b", re.IGNORECASE),
+        re.compile(r"\bno direct (medical )?benefit\b", re.IGNORECASE),
+        re.compile(r"\byou may not benefit directly\b", re.IGNORECASE),
+        re.compile(r"\bthis (study|research) may help (future patients|others)\b", re.IGNORECASE),
+        re.compile(r"\bmay help (future patients|others)\b", re.IGNORECASE),
+        re.compile(r"\bpossible benefit\b", re.IGNORECASE),
     ],
     "alternatives": [
         re.compile(r"\balternatives?\b", re.IGNORECASE),
         re.compile(r"\bother options\b", re.IGNORECASE),
+        re.compile(r"\bother treatment options\b", re.IGNORECASE),
+        re.compile(r"\bstandard (treatment|care)\b", re.IGNORECASE),
+        re.compile(r"\bother choices\b", re.IGNORECASE),
+        re.compile(r"\balternatives? to (joining|taking part|participating)\b", re.IGNORECASE),
+        re.compile(r"\binstead of (joining|taking part in|participating in) (this )?(study|research)\b", re.IGNORECASE),
+        re.compile(r"\bif you (choose|prefer) not to join\b", re.IGNORECASE),
+        re.compile(r"\bother options? (are|may be) available\b", re.IGNORECASE),
     ],
     "questions": [
         re.compile(r"\bask questions?\b", re.IGNORECASE),
@@ -66,6 +94,10 @@ REQUIRED_ELEMENT_PATTERNS: dict[str, list[re.Pattern[str]]] = {
         re.compile(r"\bloss of benefits\b", re.IGNORECASE),
         re.compile(r"\blosing benefits\b", re.IGNORECASE),
         re.compile(r"\bwithout being punished\b", re.IGNORECASE),
+        re.compile(r"\byou (may|can) leave the study at any time\b", re.IGNORECASE),
+        re.compile(r"\byou (may|can) stop participating at any time\b", re.IGNORECASE),
+        re.compile(r"\byou (may|can) withdraw at any time\b", re.IGNORECASE),
+        re.compile(r"\bleave the study at any time\b", re.IGNORECASE),
     ],
 }
 
@@ -276,6 +308,25 @@ def explicit_grounding_gap_declared(text: str, *, limitations: list[str] | None 
     if isinstance(limitations, list) and any(str(item).strip() for item in limitations):
         return True
     return bool(UNCERTAINTY_PATTERN.search(text))
+
+
+def should_flag_overconfident_answer(
+    *,
+    answer_text: str,
+    uncertainty_noted: bool,
+    unsupported_claim_risk: bool,
+    study_specific_grounding_gap: bool,
+    grounding_gap_declared: bool,
+    unsupported_marker_count: int,
+    unsupported_sentence_count: int,
+) -> bool:
+    if uncertainty_noted or not unsupported_claim_risk:
+        return False
+    if unsupported_marker_count > 0:
+        return True
+    if study_specific_grounding_gap and not grounding_gap_declared:
+        return True
+    return unsupported_sentence_count > 0 and bool(ASSERTIVE_QA_PATTERN.search(answer_text))
 
 
 def compute_grounding_diagnostics(
@@ -636,6 +687,10 @@ def compare_draft_revision_candidates(
         float(revised_summary.get("summary_flesch_kincaid_grade", 0.0))
         - float(initial_summary.get("summary_flesch_kincaid_grade", 0.0))
     )
+    initial_missing_planned = len(initial_audit.get("missing_planned_required_elements", [])) if initial_audit else 0
+    revised_missing_planned = len(revised_audit.get("missing_planned_required_elements", [])) if revised_audit else 0
+    planned_completeness_improved = initial_missing_planned > revised_missing_planned
+    completeness_improved = improved_required_elements > 0.0 or planned_completeness_improved
 
     accept_revision = revised_score > initial_score + 0.01 or (
         revised_summary.get("draft_grade_target_met")
@@ -646,7 +701,7 @@ def compare_draft_revision_candidates(
             or improved_summary_citations > 0.05
         )
     )
-    if not accept_revision and revised_score >= initial_score and improved_required_elements > 0.0:
+    if not accept_revision and revised_score >= initial_score and completeness_improved:
         accept_revision = True
     if accept_revision and initial_summary.get("draft_grade_target_met") and not revised_summary.get("draft_grade_target_met"):
         accept_revision = False
@@ -657,9 +712,9 @@ def compare_draft_revision_candidates(
     if accept_revision and summary_readability_regressed > 1.0 and improved_summary_citations <= 0.0:
         accept_revision = False
     if accept_revision and initial_audit and revised_audit:
-        initial_missing_planned = len(initial_audit.get("missing_planned_required_elements", []))
-        revised_missing_planned = len(revised_audit.get("missing_planned_required_elements", []))
         if revised_missing_planned > initial_missing_planned:
+            accept_revision = False
+        if initial_missing_planned > 0 and not completeness_improved:
             accept_revision = False
 
     reasons: list[str] = []
@@ -667,6 +722,8 @@ def compare_draft_revision_candidates(
         reasons.append("revised_draft_quality_score_improved")
         if improved_required_elements > 0.0:
             reasons.append("required_element_coverage_improved")
+        if planned_completeness_improved:
+            reasons.append("planned_required_elements_recovered")
         if improved_sentence_citations > 0.0:
             reasons.append("draft_sentence_citation_coverage_improved")
         if improved_summary_citations > 0.0:
@@ -688,10 +745,10 @@ def compare_draft_revision_candidates(
         if summary_readability_regressed > 1.0 and improved_summary_citations <= 0.0:
             reasons.append("revision_summary_readability_regressed")
         if initial_audit and revised_audit:
-            initial_missing_planned = len(initial_audit.get("missing_planned_required_elements", []))
-            revised_missing_planned = len(revised_audit.get("missing_planned_required_elements", []))
             if revised_missing_planned > initial_missing_planned:
                 reasons.append("revision_lost_planned_required_elements")
+            elif initial_missing_planned > 0 and not completeness_improved:
+                reasons.append("revision_did_not_improve_planned_completeness")
 
     return {
         "accept_revision": accept_revision,
@@ -1203,9 +1260,14 @@ def evaluate_run_outputs(run_id: str, run_dir: Path) -> dict[str, Any]:
                 "regulatory_only_grounding": bool(qa_grounding["regulatory_only_grounding"]),
                 "unsupported_claim_risk": bool(answer_summary["unsupported_claim_risk"]),
                 "omitted_required_element": False,
-                "overconfident_answer": bool(
-                    not answer_summary["uncertainty_noted"]
-                    and (answer_summary["unsupported_claim_risk"] or answer_summary["citationless_sentence_rate"] > 0.5)
+                "overconfident_answer": should_flag_overconfident_answer(
+                    answer_text=answer_text,
+                    uncertainty_noted=bool(answer_summary["uncertainty_noted"]),
+                    unsupported_claim_risk=bool(answer_summary["unsupported_claim_risk"]),
+                    study_specific_grounding_gap=bool(qa_grounding["study_specific_grounding_gap"]),
+                    grounding_gap_declared=bool(grounding_gap_declared),
+                    unsupported_marker_count=int(answer_summary["unsupported_marker_count"]),
+                    unsupported_sentence_count=int(answer_summary["unsupported_sentence_count"]),
                 ),
                 "malformed_structured_output": False,
                 "grounding_gap_declared": bool(grounding_gap_declared or answer_summary["uncertainty_noted"]),

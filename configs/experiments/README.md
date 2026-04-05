@@ -23,13 +23,15 @@ This directory groups batch specifications by purpose so pilot runs, benchmarks,
    Use this with the matching `generic_rag` and `vanilla_llm` pilot specs for a small three-way comparison before any long rerun.
 3. `pilots/nct03877237_gonogo_full_agentic_v1.json`
    Use this with the matching `generic_rag` and `vanilla_llm` go/no-go specs when you want the smallest possible preflight matrix: one study, one profile, one question set, all three workflow variants.
-4. `single_study/nct03877237_study_grounded_batch_v1.json`
+4. `pilots/nct03877237_full_agentic_followup_pilot_v1.json`
+   Use this after offline evaluator or recovery changes when you want the smallest useful Full Agentic-only live follow-up: one study, both participant profiles, and all three question sets.
+5. `single_study/nct03877237_study_grounded_batch_v1.json`
    Use this when you want a richer single-study batch around the reference case.
-5. `multi_study/hf_interventional_multi_study_v1.json`
+6. `multi_study/hf_interventional_multi_study_v1.json`
    Use this for the real multi-study benchmark after the pilot succeeds.
-6. `baselines/hf_interventional_multi_study_generic_rag_v1.json`
+7. `baselines/hf_interventional_multi_study_generic_rag_v1.json`
    Use this as the retrieval-grounded baseline without the full agentic planning and revision loop.
-7. `baselines/hf_interventional_multi_study_vanilla_llm_v1.json`
+8. `baselines/hf_interventional_multi_study_vanilla_llm_v1.json`
    Use this as the no-retrieval baseline when you want a cleaner ablation against the full system.
 
 The comparison pilot set is:
@@ -68,6 +70,24 @@ C:\Users\Ahmed\AppData\Local\Programs\Python\Python311\python.exe run_pipeline.p
 ```
 
 Use this sequence before the long live reruns so the reporting tables, grounding diagnostics, and failure summaries can be checked on a minimal matrix.
+
+The post-fix Full Agentic follow-up pilot is:
+
+- `pilots/nct03877237_full_agentic_followup_pilot_v1.json`
+
+It runs:
+
+- 1 study: `nct03877237`
+- 2 participant profiles
+- 3 question sets
+
+Use it after offline evaluator or recovery updates when you want a small live check focused on:
+
+- study procedures coverage
+- benefits coverage
+- alternatives coverage
+- QA citation behavior
+- recovery-pass provenance
 
 ## Naming
 

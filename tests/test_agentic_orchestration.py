@@ -190,9 +190,62 @@ class AgenticOrchestrationTests(unittest.TestCase):
             [item["element_id"] for item in recovery_plan["target_elements"]],
             ["study_procedures", "benefits"],
         )
+        self.assertEqual(recovery_plan["retrieval_strategy_effective"], "study_specific_single_pass")
         self.assertEqual(recovery_plan["source_group_filters"], ["trial_materials"])
+        self.assertEqual(recovery_plan["source_id_filters"], ["nct03877237"])
+        self.assertEqual(recovery_plan["filter_logic"], "intersection")
+        self.assertEqual(len(recovery_plan["retrieval_passes"]), 1)
+        self.assertEqual(recovery_plan["retrieval_passes"][0]["pass_label"], "study_specific")
         self.assertIn("study procedures", recovery_plan["query"])
         self.assertIn("possible benefits", recovery_plan["query"])
+
+    def test_plan_element_recovery_splits_study_and_regulatory_targets_cleanly(self) -> None:
+        recovery_plan = self.pipeline.orchestrator_agent.plan_element_recovery(
+            draft_audit={
+                "missing_required_elements": ["study_procedures", "questions"],
+            },
+            draft_content_plan={
+                "elements": [
+                    {
+                        "element_id": "study_procedures",
+                        "status": "supported",
+                        "preferred_source_role": "study_specific",
+                        "recommended_markers": ["[1]"],
+                        "instruction": "Explain study procedures.",
+                    },
+                    {
+                        "element_id": "questions",
+                        "status": "supported",
+                        "preferred_source_role": "regulatory",
+                        "recommended_markers": ["[2]"],
+                        "instruction": "Explain who to contact with questions.",
+                    },
+                ]
+            },
+            retrieval_plan={
+                "query": "base consent query",
+                "top_k": 5,
+                "retrieval_mode": "hybrid",
+                "source_group_filters": ["regulatory_guidance", "trial_materials"],
+                "source_id_filters": ["nct03877237"],
+                "filter_logic": "union",
+            },
+        )
+
+        self.assertIsNotNone(recovery_plan)
+        assert recovery_plan is not None
+        self.assertEqual(recovery_plan["retrieval_strategy_effective"], "split_passes")
+        self.assertEqual(len(recovery_plan["retrieval_passes"]), 2)
+        study_pass = next(item for item in recovery_plan["retrieval_passes"] if item["pass_label"] == "study_specific")
+        regulatory_pass = next(item for item in recovery_plan["retrieval_passes"] if item["pass_label"] == "regulatory")
+        self.assertEqual(study_pass["source_group_filters"], ["trial_materials"])
+        self.assertEqual(study_pass["source_id_filters"], ["nct03877237"])
+        self.assertEqual(study_pass["filter_logic"], "intersection")
+        self.assertEqual(regulatory_pass["source_group_filters"], ["regulatory_guidance"])
+        self.assertEqual(regulatory_pass["source_id_filters"], [])
+        self.assertEqual(regulatory_pass["filter_logic"], "intersection")
+        self.assertEqual([item["element_id"] for item in study_pass["target_elements"]], ["study_procedures"])
+        self.assertEqual([item["element_id"] for item in regulatory_pass["target_elements"]], ["questions"])
 
     def test_personalization_grounding_requires_trial_materials_when_study_scope_is_requested(self) -> None:
         plan = self.pipeline.orchestrator_agent.plan_personalization_grounding(
