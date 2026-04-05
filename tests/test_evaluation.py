@@ -84,12 +84,26 @@ class DraftRevisionAuditTests(unittest.TestCase):
 
         self.assertTrue(required["benefits"])
 
+    def test_benefits_match_no_direct_health_improvements_language(self) -> None:
+        required = evaluate_required_elements(
+            "There may be benefits, but the study does not guarantee direct health improvements."
+        )
+
+        self.assertTrue(required["benefits"])
+
     def test_benefits_do_not_match_explain_benefits_phrase_alone(self) -> None:
         required = evaluate_required_elements(
             "The study team will explain risks and benefits before you decide whether to join."
         )
 
         self.assertFalse(required["benefits"])
+
+    def test_voluntary_participation_matches_before_deciding_language(self) -> None:
+        required = evaluate_required_elements(
+            "You may ask questions anytime before deciding to join."
+        )
+
+        self.assertTrue(required["voluntary_participation"])
 
     def test_risks_match_discomfort_language(self) -> None:
         required = evaluate_required_elements(

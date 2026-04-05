@@ -40,6 +40,8 @@ REQUIRED_ELEMENT_PATTERNS: dict[str, list[re.Pattern[str]]] = {
         re.compile(r"\byou do not have to (join|take part|participate)\b", re.IGNORECASE),
         re.compile(r"\byou can choose not to (join|take part|participate)\b", re.IGNORECASE),
         re.compile(r"\bit is up to you whether to (join|take part|participate)\b", re.IGNORECASE),
+        re.compile(r"\bbefore deciding (?:whether )?to (join|take part|participate)\b", re.IGNORECASE),
+        re.compile(r"\bbefore you decide (?:whether )?to (join|take part|participate)\b", re.IGNORECASE),
     ],
     "study_procedures": [
         re.compile(r"\bstudy procedures?\b", re.IGNORECASE),
@@ -88,6 +90,8 @@ REQUIRED_ELEMENT_PATTERNS: dict[str, list[re.Pattern[str]]] = {
         ),
         re.compile(r"\byou (?:won['’]?t|will not) get direct medical (?:help|benefit) (?:from|through) the study\b", re.IGNORECASE),
         re.compile(r"\bthe study (?:won['’]?t|will not) give you direct medical (?:help|benefit)\b", re.IGNORECASE),
+        re.compile(r"\b(?:the )?study does not guarantee direct health improvements?\b", re.IGNORECASE),
+        re.compile(r"\bdoes not guarantee direct health improvements?\b", re.IGNORECASE),
         re.compile(r"\bthis (study|research) may help (future patients|others)\b", re.IGNORECASE),
         re.compile(r"\bmay help (future patients|others)\b", re.IGNORECASE),
         re.compile(r"\bpossible benefit\b", re.IGNORECASE),
