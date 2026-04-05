@@ -28,6 +28,6 @@
       "configs/question_sets/study_participation_basics.json",
       "configs/question_sets/study_specific_basics.json"
     ],
-    "notes": "Three-way dry-run comparison pilot for the selected NCT03877237 study using the full agentic workflow."
+    "notes": "Small three-way comparison pilot for the selected NCT03877237 study using the full agentic workflow."
   }
 }

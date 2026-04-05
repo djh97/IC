@@ -23,7 +23,7 @@
       "case_id": "nct03877237_low_literacy_study_specific_pilot",
       "patient_profile_file": "configs/patient_profiles/example_us_low_literacy.json",
       "question_set_file": "configs/question_sets/study_specific_basics.json",
-      "notes": "Single-case live sanity check for the matrix-based multi-study path, using the historically fragile low-literacy study-specific scenario."
+      "notes": "Single-case study-grounded pilot for the low-literacy study-specific scenario."
     }
   ]
 }

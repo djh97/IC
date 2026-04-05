@@ -1,6 +1,6 @@
 {
   "version": "0.1.0",
-  "description": "Initial implementation-facing source registry for the informed consent prototype.",
+  "description": "Reference source registry for informed-consent data collection and evaluation.",
   "source_groups": [
     {
       "group_id": "regulatory_guidance",

@@ -1,6 +1,6 @@
 # Data Notes
 
-This directory is reserved for implementation-facing data assets that may later be used by the prototype.
+This directory is reserved for versioned data assets used by the repository.
 
 Recommended local layout:
 
@@ -9,4 +9,4 @@ Recommended local layout:
 - `data/processed/`: normalized or transformed artifacts
 - `data/eval/`: evaluation case definitions and rubrics
 
-Sensitive, copyrighted, or temporary source documents should not be committed unless they are clearly allowed for redistribution.
+Sensitive or copyrighted source documents should not be committed unless they are clearly allowed for redistribution.

@@ -1,28 +1,28 @@
-# Methodology Tracking
+# Methodology And Reproducibility Notes
 
-This document tracks what the implementation must preserve so the later paper can be written without reconstructing decisions from memory.
+This document summarizes the implementation details that should remain reproducible across experiments and manuscript revisions.
 
-## Methods We Must Be Able To Report
+## Method Details To Preserve
 
 - model name, provider, and endpoint configuration
 - retrieval configuration
 - source categories and authority
 - chunking and indexing procedure
-- personalization workflow
+- profile-adaptation workflow
 - traceability mechanism
 - structured output schema
 - evaluation setup and baselines
 
-## Results We Must Be Able To Produce
+## Result Types To Preserve
 
 - coverage outcomes
 - traceability outcomes
 - readability outcomes
-- personalization outcomes
+- profile-adaptation outcomes
 - structured-output validity
 - ablation comparisons
 - qualitative case examples
 
-## Implementation Rule
+## Repository Convention
 
-Any stage that could affect the final paper should emit an artifact, log entry, or config snapshot.
+Any stage that could affect the reported methods or results should emit an artifact, log entry, or configuration snapshot.

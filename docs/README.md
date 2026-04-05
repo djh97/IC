@@ -1,6 +1,6 @@
 # Docs
 
-This directory contains implementation-facing documentation that belongs in the repository.
+This directory contains project documentation that belongs in the repository.
 
 Examples:
 

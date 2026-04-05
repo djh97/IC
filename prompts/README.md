@@ -6,7 +6,7 @@ Keeping prompts in files rather than inline strings helps with:
 
 - reproducibility
 - prompt governance
-- paper methods reporting
+- reproducible evaluation and reporting
 - future ablation studies
 
 Prompts should be treated as controlled implementation artifacts.

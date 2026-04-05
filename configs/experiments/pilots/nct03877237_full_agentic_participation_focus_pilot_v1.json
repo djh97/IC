@@ -26,6 +26,6 @@
     "question_set_files": [
       "configs/question_sets/study_participation_basics.json"
     ],
-    "notes": "Tiny Full Agentic participation-focused pilot for checking benefits, study procedures, alternatives, QA citation behavior, and recovery provenance after the post-run offline evaluator and revision-guidance fixes."
+    "notes": "Focused Full Agentic participation pilot for checking benefits, study procedures, alternatives, QA citation behavior, and recovery provenance."
   }
 }

@@ -26,7 +26,7 @@
       "retrieval_source_ids": [
         "nct03877237"
       ],
-      "notes": "Go or no-go preflight case for the generic retrieval-grounded baseline before the long live comparison run."
+      "notes": "Minimal one-case comparison slice for the generic retrieval-grounded baseline."
     }
   ]
 }

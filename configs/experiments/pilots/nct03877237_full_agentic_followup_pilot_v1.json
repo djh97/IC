@@ -28,6 +28,6 @@
       "configs/question_sets/study_participation_basics.json",
       "configs/question_sets/study_specific_basics.json"
     ],
-    "notes": "Post-fix Full Agentic follow-up pilot for checking benefits, study procedures, alternatives, QA citation behavior, and recovery provenance before any wider rerun."
+    "notes": "Focused Full Agentic pilot for checking benefits, study procedures, alternatives, QA citation behavior, and recovery provenance."
   }
 }

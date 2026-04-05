@@ -13,6 +13,19 @@ This repository contains a software pipeline for personalized informed consent g
 - `tests/`: automated tests
 - `run_pipeline.py`: command-line entry point
 
+## Included Versus Generated Content
+
+- Versioned in the repository:
+  - implementation code, prompt templates, experiment specifications, tests, and example inputs
+  - public-source manifests and registry snapshots under `data/raw/public/manifests/`
+  - a small public-source example subset under `data/raw/public/` for reference and testing
+- Generated locally:
+  - prepared corpora, retrieval indices, run outputs, evaluation tables, and other experiment artifacts under `artifacts/`
+- Downloaded or refreshed on demand:
+  - public-source materials collected through the ingestion commands in the `Source Ingestion` section
+
+The checked-in public-source files are intentionally minimal. The manifests and ingestion commands are used to rebuild the larger public-source bundle locally when needed.
+
 ## Requirements
 
 - Python 3.11+
@@ -27,9 +40,9 @@ pip install -r requirements.txt
 Create a `.env` file from `.env.example` and set the required Hugging Face values:
 
 ```env
-HF_TOKEN=your_token_here
+HF_TOKEN=<set_me>
 HF_MODEL_ID=Qwen/Qwen3-8B
-HF_INFERENCE_ENDPOINT=https://your-endpoint-url
+HF_INFERENCE_ENDPOINT=<set_me>
 HF_ENABLE_THINKING=false
 ```
 

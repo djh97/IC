@@ -1,6 +1,6 @@
 # Configs
 
-This directory stores implementation-facing configuration files that should be versioned with the codebase.
+This directory stores versioned configuration files used to reproduce experiments and document evaluation settings.
 
 Recommended contents:
 
@@ -14,6 +14,6 @@ Recommended contents:
 - example participant profiles
 - run configuration templates
 
-These files make assumptions explicit and reviewable as the system evolves.
+These files make experiment assumptions explicit and reviewable as the system evolves.
 
-See [experiments/README.md](/c:/Users/Ahmed/InformedConsent/configs/experiments/README.md) for the organized experiment-spec layout and recommended run order.
+See [experiments/README.md](experiments/README.md) for the experiment-spec layout and usage examples.
