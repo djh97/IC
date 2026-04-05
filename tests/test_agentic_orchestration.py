@@ -312,6 +312,91 @@ class AgenticOrchestrationTests(unittest.TestCase):
         self.assertIn("There may be no direct benefit to you", request_bundle["targeted_revision_guidance"])
         self.assertIn("There may be no direct benefit to you", request_bundle["messages"][1]["content"])
 
+    def test_revise_draft_adds_targeted_low_literacy_alternatives_guidance(self) -> None:
+        patient_profile = self.pipeline.personalization_agent.tools.state.resolve_patient_profile(
+            self.run_id,
+            self.patient_profile_path
+        )
+        retrieval_hits = [
+            {
+                "source_id": "common_rule_2018_july",
+                "chunk_id": "reg-1",
+                "rank": 1,
+                "score": 0.9,
+                "citation_label": "Common Rule",
+                "excerpt": "Alternative procedures or courses of treatment may be advantageous to the subject.",
+                "metadata": {"source_group": "regulatory_guidance"},
+            }
+        ]
+        retrieval_artifacts = {
+            "mode_used": "hybrid",
+            "dense_available": True,
+            "source_group_filters": ["trial_materials", "regulatory_guidance"],
+            "source_id_filters": ["nct03877237"],
+            "filter_logic_used": "intersection",
+            "filtered_chunk_count": len(retrieval_hits),
+            "lexical_hits": [],
+            "dense_hits": [],
+            "retrieval_hits": retrieval_hits,
+            "evidence_package": self.pipeline.build_role_separated_evidence_package(retrieval_hits),
+            "scoped_retrieval_strategy": "study_plus_regulatory_split",
+        }
+
+        with patch(
+            "informed_consent.agent_tools.GenerationTools.call_json_model",
+            return_value={
+                "key_information_summary": "You may have other treatment options besides joining [1].",
+                "key_information_citation_markers_used": ["[1]"],
+                "personalized_consent_text": "You may have other treatment options besides joining [1].",
+                "citation_markers_used": ["[1]"],
+                "personalization_rationale": [],
+                "grounding_limitations": [],
+            },
+        ):
+            result = self.pipeline.personalization_agent.revise_draft(
+                run_id=self.run_id,
+                patient_profile=patient_profile,
+                patient_profile_path=self.patient_profile_path,
+                base_template_text=self.template_path.read_text(encoding="utf-8"),
+                template_path=self.template_path,
+                generation_query="alternatives",
+                retrieval_artifacts=retrieval_artifacts,
+                current_draft={
+                    "key_information_summary": "You can choose to join.",
+                    "key_information_citation_markers_used": [],
+                    "personalized_consent_text": "You can choose to join.",
+                    "citation_markers_used": [],
+                    "personalization_rationale": [],
+                    "grounding_limitations": [],
+                },
+                draft_audit={
+                    "issues": ["planned_required_elements_missing"],
+                    "missing_required_elements": ["alternatives"],
+                    "missing_planned_required_elements": ["alternatives"],
+                },
+                draft_content_plan={
+                    "elements": [
+                        {"element_id": "alternatives", "status": "supported"},
+                    ]
+                },
+                recovery_targets=[
+                    {
+                        "element_id": "alternatives",
+                        "status": "supported",
+                    }
+                ],
+                focused_recovery_context="Alternatives recovery context.",
+                top_k=6,
+                retrieval_mode="hybrid",
+                source_group_filters=["trial_materials", "regulatory_guidance"],
+                source_id_filters=["nct03877237"],
+                dry_run=False,
+            )
+
+        request_bundle = json.loads(Path(result["request_bundle_path"]).read_text(encoding="utf-8"))
+        self.assertIn("other treatment options besides joining", request_bundle["targeted_revision_guidance"])
+        self.assertIn("other treatment options besides joining", request_bundle["messages"][1]["content"])
+
     def test_agents_receive_scoped_toolsets(self) -> None:
         self.assertTrue(hasattr(self.pipeline.orchestrator_agent.tools, "evaluation"))
         self.assertTrue(hasattr(self.pipeline.orchestrator_agent.tools, "generation"))

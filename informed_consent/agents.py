@@ -586,6 +586,19 @@ class PersonalizationAgent(BaseAgent):
                 ]
             )
 
+        if (
+            patient_profile.health_literacy == "low"
+            and "alternatives" in target_element_ids
+            and "alternatives" in missing_element_ids
+        ):
+            guidance_lines.extend(
+                [
+                    "For low-literacy alternatives coverage, add one short standalone alternatives sentence in the summary and the fuller draft.",
+                    "Prefer simple wording such as 'You may have other treatment options besides joining [x].' or 'You may have other choices besides joining [x].' when that is what the evidence supports.",
+                    "Do not leave alternatives implied; state the other-options sentence directly.",
+                ]
+            )
+
         if not guidance_lines:
             return "No extra targeted revision guidance was prepared."
 

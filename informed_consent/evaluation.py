@@ -61,6 +61,11 @@ REQUIRED_ELEMENT_PATTERNS: dict[str, list[re.Pattern[str]]] = {
     ],
     "risks": [
         re.compile(r"\brisks?\b", re.IGNORECASE),
+        re.compile(r"\b(?:possible|known|main|serious)\s+risks?\b", re.IGNORECASE),
+        re.compile(r"\bside effects?\b", re.IGNORECASE),
+        re.compile(r"\bdiscomfort\b", re.IGNORECASE),
+        re.compile(r"\binconvenience\b", re.IGNORECASE),
+        re.compile(r"\byou (?:might|may|could) feel (?:some )?(?:discomfort|pain|side effects?)\b", re.IGNORECASE),
     ],
     "benefits": [
         re.compile(r"\bpossible benefits?\b", re.IGNORECASE),
@@ -81,6 +86,8 @@ REQUIRED_ELEMENT_PATTERNS: dict[str, list[re.Pattern[str]]] = {
             r"\b(?:we\s+)?can(?:not|['’]t)\s+say for sure(?: if)?\s+you(?:['’]ll| will)?\s*get direct benefit\b",
             re.IGNORECASE,
         ),
+        re.compile(r"\byou (?:won['’]?t|will not) get direct medical (?:help|benefit) (?:from|through) the study\b", re.IGNORECASE),
+        re.compile(r"\bthe study (?:won['’]?t|will not) give you direct medical (?:help|benefit)\b", re.IGNORECASE),
         re.compile(r"\bthis (study|research) may help (future patients|others)\b", re.IGNORECASE),
         re.compile(r"\bmay help (future patients|others)\b", re.IGNORECASE),
         re.compile(r"\bpossible benefit\b", re.IGNORECASE),
